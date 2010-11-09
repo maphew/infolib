@@ -1,0 +1,200 @@
+EPA Region 10 dbf utilities.
+Version 5.7 July 13, 1998
+
+
+This package is a set of utilities for translating data between dBASE
+dbf, ASCII, and ARC/INFO formats.  Most of the programs run either as
+ARC commands or as system commands independent of ARC/INFO.
+
+An install script is included that configures, builds, tests, and
+installs the package.  Pre-compiled packages are available for several
+systems.
+
+These programs were developed for EPA use, but have been released as
+free software.  Anyone can use them.
+
+A web page is available that describes the package, including changes
+since the last version, and links to download the package.  This page
+is available from the software section of the EPA Region 10 home page:
+
+  http://www.epa.gov/r10earth/r10.html
+
+
+Utilities included
+------------------
+
+The following utilities are implemented as ARC commands, but they do
+not require ARC/INFO, and may also be installed as system commands.
+
+  dbf2info    -- Creates an INFO data file from a dBASE dbf file.
+  info2dbf    -- Creates an dBASE dbf file from INFO data file.
+  ascii2info  -- Creates an INFO data file from an ASCII file.
+  info2ascii  -- Creates an ASCII file from an INFO data file.
+  dbflook     -- Lists the header, field defs, and data in a dbf file.
+  dbflist     -- Lists the data section of a dbf file to stdout.
+  dbfitems    -- Lists the field definitions of a dbf file to stdout.
+  infodir     -- Lists the contents of an INFO directory, with wildcarding.
+
+
+The following are implemented as ARC commands.  They require ARC/INFO.
+
+  info2cover  -- Creates a point coverage from an INFO file.
+  dbf2cover   -- Creates a point coverage from a dbf file.
+
+
+The following utilities are implemented as system commands.  They run
+from the system prompt, and do not require ARC/INFO.
+
+  infolook    -- Lists the header, item defs, and data in an INFO file.
+  infolist    -- Lists the data section of an INFO data file to stdout.
+  infoitems   -- Lists the item definitions of an INFO data file to stdout.
+  infodel     -- Deletes INFO files, with wildcarding.
+
+
+Determining which files you need
+--------------------------------
+
+The package is available via anonymous ftp from ftp.epa.gov in
+/pub/gistechs/programs.  The files to get are dbf-N.N.readme (this
+file) and dbf-N.N.tar.Z (or dbf-N.N.tar.gz if you have gzip), where
+"N.N" is the current version number.
+
+The dbf-N.N.tar file is the most generic from of the package.  It has
+the complete source code, and everything you need to install the
+package on various UNIX boxes.
+
+There may also be tarfiles that contain pre-compiled executables for
+specific machines, eg, dbf-N.N.DGUX.tar for Data General AViiON, etc.
+These contain no C source code, just the compiled programs.  If there
+is a tar for your machine, and you don't want the source, you can save
+some time by getting that instead of dbf-N.N.tar.
+
+
+Loading the package on to your system
+-------------------------------------
+
+Create directory where you want to keep the package.  This directory
+will remain the permanent home for all the files.  Files will be
+accessed from here when the programs are run, thus this directory must
+be accessible to everyone whom you want to be able to run the
+programs.
+
+If you already have a previous version of the package, choose a
+different directory, eg, dbf2info-N.N, where N.N is the current
+version.  This will allow you to revert to the previous version if
+desired.  Later, you can delete the old version.  If your old version
+is 5.0 or higher you might want to run "dbfinstall uninstall" first.
+This is not available below version 5.0.
+
+If you received the package as a compressed tarfile, place the file in
+the directory you just created, uncompress it and extract the files
+from the tar.  If you received the package on tape, extract the tar
+into the directory.
+
+
+Configuring the package for your system
+---------------------------------------
+
+If you are installing from a pre-compiled release, skip this section;
+it applies only to the full source release.
+
+The install script checks for some system dependencies and configures
+the package accordingly, but there are some things it can't check for.
+
+There are two files to check.  The first is rbdpaths.h.  At the top of
+the file is a series of variables for various systems.  Not all
+systems are represented.  There are instructions in the file to help
+you determine which one to use for your system.
+
+The second file to check is PROBLEMS.  This file describes any known
+problems that may arise during installation.  If a problem is known to
+occur on your system, you will find instructions to fix the problem.
+
+
+Configuring the install script
+------------------------------
+
+There is a script called dbfinstall that handles configuring,
+building, testing, and installing the package.  This script is written
+to run in the Bourne Shell.
+
+The install script comes set so that all of the programs will be
+installed as ARC commands, and none of them will be installed as UNIX
+commands.  The last group of programs (infolook, etc) will thus not be
+installed at all.
+
+The advantage to doing the UNIX install, is that the programs will
+then be available outside of ARC/INFO.  It's quite handy to be able to
+list INFO directories, examine INFO files, create and delete them,
+without having to start ARC.
+
+If you don't want to do the UNIX install at this time, skip ahead to
+the next section.  You can do the UNIX install later if you change
+your mind.
+
+However, if you don't want to do the ARC install, you will have to
+edit dbfinstall and make the following change:
+
+    change "install_arc=1" to "install_arc=0"
+
+Unless you have chosen not to do the ARC install, the environment
+variable ARCHOME must be set and available to the dbfinstall script.
+If ARCHOME is not accessible to your shell, you will need to edit
+dbfinstall, substituting the full path to ARC's home for ARCHOME.
+
+If you want to do the UNIX install, you will have to edit dbfinstall
+and make the following changes:
+
+    change "install_unix=0" to "install_unix=1"
+
+  Figure out where you want the executables to be placed.  This must
+  be somewhere on everyone's path, like /usr/global/bin or whatever
+  you use at your site.
+
+    then change "binpath=" to the directory you selected.
+
+  If you have an earlier version (5.4 or older) of the utilities
+  installed, and you want to uninstall it before installing the new
+  version, you will also have to set manpath to whatever you used when
+  you installed the earlier version so it can uninstall the man pages.
+  At version 5.5, and beyond, man pages are no longer installed.
+
+
+Running the install script
+--------------------------
+
+Type "dbfinstall full".  This will configure the package for your
+system, compile everything (unless you're installing from a
+pre-compiled release), verify that the programs function correctly,
+and install them.
+
+You can do the steps one at a time if you wish.  Type "dbfinstall" to
+see the usage for other options.  For more help on using the install
+script, type "dbfinstall help".
+
+If you encounter problems, consult the file PROBLEMS, to see if there
+is a known fix.  If not, contact me.
+
+
+Disclaimers
+-----------
+
+These programs are not recommended or endorsed by The United States
+Government, or by the Environmental Protection Agency.  The programs
+are provided "as is" without warranty of any kind, either expressed or
+implied.
+
+These programs make extensive use of a public domain C package for
+direct INFO access called infolib written by Todd Stellhorn of ESRI.  
+The infolib code contains the following disclaimer: 
+
+           This software is being released into the public
+           domain.  It may be freely used whole or in part or
+           distributed as a whole as long as this notice remains
+           attached to the source code.  The author and ESRI
+           do not assume any liability or responsibility in the
+           use or distribution of this software. 
+
+
+Randy Deardorff <deardorff.randy@.epa.gov>
+US EPA Region 10, Seattle.
