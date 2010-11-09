@@ -1,0 +1,17 @@
+/* dbfitems.aml
+/*----------------------------------------------------------------------------
+/* Written: 05/20/94 Randy Deardorff.  USEPA Seattle.  206-553-8183.
+/*                   rdeardor@r0serv.r10.epa.gov
+/*
+/* This is a simple AML driver for dbfitems so it can be installed as an
+/* ARC/INFO atool.
+/*
+/* Modification log: (All changes are by the author unless otherwise noted)
+/*----------------------------------------------------------------------------
+&args dbffile otherargs:rest
+&s utilpath /usr/tmp/dbf2info/
+&if [null %dbffile%] &then
+  &sys %utilpath%dbfitems
+&else
+  &sys %utilpath%dbfitems %dbffile% [unquote %otherargs%]
+&return

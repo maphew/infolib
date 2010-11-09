@@ -1,0 +1,1109 @@
+This describes Todd Stellhorn's infolib C library.  I (Randy
+Deardorff) have included a slightly modified version of this library
+with my dbf2info package, integrated into my infox library.
+
+There are three sorts of changes that I have made to Todd's code:
+
+1) A few changes to do with fixing minor bugs in the handling of 8.3
+   workspaces.  These changes are in infodefs.h, infofile.c and
+   infoitem.c.
+
+2) A few changes for using the library on DOS machines.  See
+   infodefs.h.
+
+3) Very minor changes to get Todd's library to coexist peacefully with
+   my functions.
+
+All changes are fairly well documented with comments.
+
+Todd's description follows:
+------------------------------------------------------------------------
+@(#)infolib12.txt	1.1 2/14/94
+
+06/08/92 Rev 1.0
+03/15/93 Rev 1.1
+02/14/94 Rev 1.2
+
+Todd Stellhorn 
+ESRI, Redlands 
+tstellhorn@esri.com
+
+
+    A Set of C Language Functions for Accessing INFO Files
+
+
+Abstract: Many ARC/INFO geoprocessing and attribute manipulation
+functions can be performed using the data manager INFO.  Access to the
+analytical and processing capabilities of INFO mainly include
+command-line usage, AML data blocks, and INFO programs.  These
+capabilities provide users with access to the topological and attribute
+information stored in the Feature Attribute Tables (FATs) and related
+tables.  Access to the topological and attribute information in these
+tables allows for the creation of complex user-defined models and
+geoprocessing algorithms.  Additional capabilities can be gained if
+complex algorithms and functions have the ability to operate directly
+on the INFO data files.  This paper describes a simple set of C
+language functions to access INFO files.  The functions include the
+ability to create, delete, open, read, write, and close INFO files, as 
+well as utility and sequential and binary search functions.  The calling
+sequence of the user-level functions are described within the context
+of a sample program.  Source code of the INFO access functions and the
+sample programs are available from the author via return email.
+
+
+Introduction
+~~~~~~~~~~~~
+
+This paper describes a set of C language functions for accessing INFO
+files.  The set of functions, named infolib, is available via return
+email from the author.  These functions are not part of an ESRI
+supported software product, however, questions or comments directed to
+the author via email will be responded to.
+
+Appendix A of this paper contains additional notes about the infolib
+Revision 1.1 release.  Support for ULTIX and a number of new functions
+have been added in addition to bug fixes.  Further documentation for
+the new user-level functions is contained in this paper.
+
+Appendix B of this paper contains additional notes about the infolib
+Revision 1.2 release.  This release contains bug fixes and support for
+ARC/INFO 8.3 workspaces.
+
+
+Description
+~~~~~~~~~~~
+
+infolib is a light-weight library of C language functions for accessing
+INFO files.  It provides the ability to create, delete, open, read, write, 
+and close INFO files.  Eleven INFO item types are supported, including D,
+C, I, N, B (2 and 4 byte), F (4 and 8 byte) and the pseudo item
+$RECNO.  infolib provides fast, C-level access to ARC/INFO FATs and
+related tables.  It has been designed and implemented for ease of use
+by the programmer by encapsulating information about open files and
+item definitions into dynamically allocated structures.  It borrows
+some concepts from ARC/INFO's ISP module, but is an independent
+implementation.
+
+infolib does not provide full INFO file manipulation capabilities.
+Full file manipulation is contained in INFO, ARC/INFO, and, at the C or
+FORTRAN coding levels, ISP.  The two most notable limitations of
+infolib are that it does not contain the ability to add items to
+existing INFO files.  infolib can, however, create empty INFO files and
+define items onto those files.  The second notable limitation is that
+infolib supports a subset of the INFO data types.  However, the most
+widely used data types for geoprocessing applications are provided for
+as discussed above.
+
+infolib was initially written as a C programming exercise and to
+provide an ISP-independent INFO file access module to aid in the
+development of complex geoprocessing algorithms and models.  To date,
+the majority of these algorithms and models have typically been
+implemented as INFO programs.  infolib is not intended to replace the
+use of INFO programming, but rather to augment it by providing
+additional processing and modeling capabilities.
+
+Following its initial implementation, infolib was found to be useful in
+writing small INFO file access utilities, such as returning a single
+item value, constructing a list of item values, and returning an entire
+INFO file record.  A handful of INFO file utilities have been developed
+using infolib and placed in a low-level module called infotools.
+
+The bulk of infolib development occurred on a 386 class IBM PC using
+PC-INFO.  It was ported to UNIX (SunOS) and system dependencies
+identified and removed and/or isolated.  At the present, infolib has
+been tested and runs under SunOS, AIX, IRIX, and ULTIRX.  At Revision
+1.1 support for DOS has been discontinued.
+
+The code has been written to be modular and portable.  Changing between
+operating systems requires a small amount of editing to the infodefs.h
+file to indicate the target OS and recompiling.  infolib is written in
+standard C and uses Kernighan & Ritchie (K&R) style prototypes.
+
+
+Key Concepts
+~~~~~~~~~~~~
+
+The INFO data model is based on the DR9 and NIT files which track the
+files within an INFO directory and the items within a file
+respectively.  Both files are implemented as fixed record length files
+which can be accessed using the standard C functions fread() and
+fwrite().  The DR9 contains such information as the file's internal or
+user name, the file's external name (e.g., ARC001), the file type (data
+file, program, report, etc.), the number of items, the record length,
+and whether or not the file entry references an external data file.
+The NIT file contains information on the items of a file such as the
+item's name, width, type, record position, output width, number of
+decimals, and alternate name.  Between these two files, INFO manages
+and maintains the files within the INFO directory.
+
+The information contained in the DR9 is accessed when opening an INFO
+file, while the NIT is accessed when referencing the items within a
+file.  Within an infolib program, the DR9 information is contained in
+the typedef'ed structure InfoFile while the NIT information is
+contained in the typedef'ed structure InfoItemDef.  These structures
+are dynamically allocated using the functions InfoOpenFile() and
+InfoGetItemDef() respectively.  The structures are further described
+below.
+
+The function InfoOpenFile() returns a pointer to type InfoFile on
+success or (InfoFile *)NULL on error.  The type InfoFile has the
+following definition:
+
+typedef struct 
+{
+      char *FileName; 		/* user file name */
+      char *DirFilePath; 	/* path to DR9 file */
+      char *NitFilePath; 	/* path to FileName NIT file */
+      FILE *InfoFILE; 		/* file pointer */
+      short int NumberItems; 	/* number of (real) items */
+      short int RecordLength; 	/* logical record length */
+      long int NumberRecords; 	/* number of records */
+      short int AccessFlag; 	/* access flag */
+      long int CurrentRecord; 	/* current record number */
+      char *IOBuffer; 		/* input/output buffer */ 
+} InfoFile;
+
+FileName - This is a character pointer which points to a dynamically
+allocated array containing the open INFO file's internal or user name.
+
+DirFilePath - This is a character pointer which points to a dynamically
+allocated array containing the full system pathname to the INFO file's
+DR9 file.  This file pathname is used when closing the INFO file to
+update the number of records field in the DR9.
+
+NitFilePath - This is a character pointer which points to a dynamically
+allocated array containing the full system pathname to the INFO file's
+NIT file.  This file pathname is used when returning the file's item
+definitions.
+
+InfoFILE - This is a pointer to the stdio.h type FILE.  This pointer is
+used to reference the INFO file's data file.
+
+NumberItems - This is a short integer field which contains the number
+of items on the file as recorded in the DR9 file.  The DR9 records the
+number of real or non-redefined items -- any items in excess of this
+number are considered to be redefined.
+
+RecordLength - This is a short integer field which contains the logical
+record length, in bytes, of the data file as recorded in the DR9.  The
+maximum record length of an INFO file is 4069 bytes.
+
+NumberRecords - This is a long integer field which contains the number
+of records in the data file as recorded in the DR9 file.  This value is
+updated as the file is closed if the file was opened with write
+access.
+
+AccessFlag - This is a short integer field which contains the INFO
+file's access as requested on file open.  AccessFlag is set using one
+of the following infolib.h macros:
+
+	InfoREAD	Opens an INFO data file for read only access,
+	InfoWRITE	Opens an INFO data file for read and write access,
+	InfoINIT	Opens an INFO data file for read and write access 
+                          but truncates the data file to zero length on open.
+
+CurrentRecord - This is a long integer field which contains the record
+number of the last record to have been read into the INFO file's
+IOBuffer.
+
+IOBuffer - This is a character pointer which points to a dynamically
+allocated buffer used as the INFO file's input/output buffer.  infolib
+file interactions are performed by reading information from the data
+file into the IOBuffer, decoding and encoding data values from and into
+the buffer and, optionally, writing the contents of the buffer back to
+the open INFO file.
+
+To access the data values contained in an InfoFile's IOBuffer, an
+item's definition contained in the file's NIT file must be retrieved
+using InfoGetItemDef().  This function returns a pointer of type
+InfoItemDef which has the following definition:
+
+typedef struct 
+{
+      short int ItemPosition; 		/* item position */
+      short int ItemWidth; 		/* item width */
+      short int ItemType; 		/* item type */
+      short int NumberDecimals; 	/* number of decimal places */
+      short int OutputWidth; 		/* item output width */
+      char ItemName[17]; 		/* item name */ 
+} InfoItemDef;
+
+ItemPosition - This is a short integer field containing the current
+item's position within a logical record. This value is used to extract
+or insert data values from or into the IOBuffer.
+
+ItemWidth - This is a short integer field containing the length in
+bytes of the current item.  This value, along with ItemPosition, yields
+the location of the item's data values within the IOBuffer.
+
+ItemType - This is a short integer field value indicating the item's
+type.  Item types are referenced using the infolib.h macros:
+
+	INFO_DATE_TYPE 
+	INFO_CHARACTER_TYPE 
+	INFO_INTEGER_TYPE 
+	INFO_NUMBER_TYPE
+	INFO_BINARY_TYPE 
+	INFO_FLOATING_TYPE 
+	INFO_LEADFILL_TYPE
+	INFO_PACKED_TYPE 
+	INFO_ZEROFILL_TYPE 
+	INFO_OVERPUNCH_TYPE
+	INFO_TRAILINGSIGN_TYPE 
+	INFO_RECNO_TYPE
+
+Of the above infolib.h macros, only INFO_DATE_TYPE,
+INFO_CHARACTER_TYPE, INFO_INTEGER_TYPE, INFO_NUMBER_TYPE,
+INFO_BINARY_TYPE, INFO_FLOATING_TYPE and INFO_RECNO_TYPE are currently
+supported by infolib.
+
+NumberDecimals - This is a short integer field containing the number of
+decimals of the current item.
+
+OutputWidth - This is a short integer field containing the current
+item's output width.
+
+ItemName - This is a character buffer containing the current item's
+name as input by the user.  Item names may not exceed sixteen
+characters as defined by INFO.
+
+
+Code Organization
+~~~~~~~~~~~~~~~~~
+
+infolib is organized into ten source modules and three header files.
+Additionally, infolib can be divided into user-level functions,
+structure access functions, and non-user-level or low-level functions.
+The user-level and structure access functions are further described in
+the following section.  The source and header files are briefly
+described below.
+
+infodir.c - This module contains functions to read and write records to
+an INFO directory's DR9 file.  The functions contained in infodir.c are
+not user-level functions.
+
+infoetc.c - This module contains miscellaneous functions, such as low
+level file open and close utilities, memory management and a function
+to return a file's external pathname.  The functions contained in
+infoetc.c are not user-level functions.
+
+infofile.c - This module contains the user-level functions which
+operate directly on INFO files.  The functions include the ability to
+create, delete, open and close INFO files, test for the existence of an 
+INFO file, flush an INFO file pointer, and INFO file pointer structure
+access functions.
+
+infoitem.c - This module contains the user-level functions which deal
+with the items of an opened INFO file.  The functions include returning
+the item definition, testing for the existence of an item, and the
+decoding and encoding of the item values.  Additionally, this module
+contains the function to define a new item and the INFO item definition
+structure access functions.
+
+infoname.c - This module contains the user-level functions for
+generating INFO file names and pathnames.  Functions contained in this
+module include ARC/INFO file name generation and temporary file name
+generation.
+
+infonit.c - This module contains functions to read and write records to
+an INFO file's NIT file.  The NIT file contains the INFO file's item
+definitions.  The functions contained in infonit.c is not a user-level
+functions.
+
+inforec.c - This module contains the user-level functions which operate
+on records of an open INFO file.  These functions include reading and
+writing records.
+
+infostr.c - This module contains miscellaneous string processing
+functions, such as conversion of FORTRAN non-terminated strings into C
+terminated strings, string case conversion utilities, and various
+string comparison functions.  The functions contained in infostr.c are
+not user-level functions.
+
+infoswap.c - This module contains a byte swapping function used to swap
+the byte positions for short and long integers.  This function is not a
+user-level function.
+
+infoutil.c - This module contains infolib utility functions, including
+sequential and binary search, and the returning of an open INFO file's
+item definition template.  The functions contained in infoutil.c are
+user-level functions.
+
+infolib.h - This header file contains the typedef structure definitions
+for InfoFile and InfoItemDef, macro definitions for the INFO data
+types, miscellaneous flag macro definitions, such as file open status
+and string comparison type, and K&R-style prototypes.  The header file
+infolib.h must be included in all user programs which use infolib.
+
+infodefs.h - This header file contains a number of operating system
+dependencies, DR9 and NIT file record definitions, and a set of
+additional low-level macro definitions.  The header file infodefs.h is
+not required by user-level programs.
+
+
+User-Level Functions
+~~~~~~~~~~~~~~~~~~~~
+
+infolib consists of twenty-two user-level functions, a number of
+structure access functions, and a host of string processing and support
+functions.  The core of the user-level functions provide the ability to
+open, close, read and write INFO files.  Each of the user-level
+functions are described below.  The structure access functions are
+described in the following section.  Additional information on the
+functions' calling sequence and return values are contained in the
+function headers and source code in-line comments.
+
+To open an existing INFO file, a call is made to InfoOpenFile().
+
+	InfoFile *InfoOpenFile( name, access )
+
+	char *name; 
+	short int access;
+
+InfoOpenFile() opens an INFO file based on an input INFO file pathname
+and access type.  Access types are set using the macros InfoREAD,
+InfoWRITE and InfoINIT (InfoINIT truncates the data file to zero length
+on open).  ARC/INFO style INFO pathnames are supported using the
+separator characters ":" and "!".  INFO file names may assume the
+current INFO directory, be constructed from relative pathnames, or may
+be fully expanded pathnames and may be specified with or without an
+INFO user name.  On success, InfoOpenFile() opens the INFO file and
+returns a structure pointer of type InfoFile.  If the requested file
+does not exist or an error occurs, InfoOpenFile() returns (InfoFile *)
+NULL.
+
+To close a previously opened INFO file, a call is made to
+InfoCloseFile().
+
+	short int InfoCloseFile( ifp )
+
+	InfoFile *ifp;
+
+InfoCloseFile() closes the INFO file pointed to by ifp and returns the
+InfoFile structure memory to free memory.  If the file was opened with
+an access type other than InfoREAD (see InfoOpenFile() above for a
+description of access types), then the INFO file's DR9 is updated with
+the final number of records in the file.  On success, InfoCloseFile()
+returns a value of INFO_SUCCESS, on error returns a value of
+INFO_FAIL.
+
+To test for the existence of an INFO file, a call to InfoFileExists()
+is made.
+
+	short int InfoFileExists( name )
+
+	char *name;
+
+InfoFileExists() returns a value of INFO_SUCCESS if the input INFO file
+exists in the file's DR9 and returns a value of INFO_FAIL if the file
+does not exist or on error.  A successful return does not guarantee
+that the INFO file can be successfully opened, only that the file name
+exists in a non-empty record in the DR9.  To trap for all potential
+errors, the return value from an InfoOpenFile() call should be
+evaluated regardless of the InfoFileExists() return value.
+
+To create a new empty INFO file, a call is made to InfoCreateFile().
+
+        short int InfoCreateFile( name, template )
+
+        char *name;
+        InfoFile *template;
+
+InfoCreateFile() creates a new empty INFO file with either an empty
+item template or an item template copied from an input open INFO file
+pointed to by template.  The item file is empty if a NULL INFO file
+pointer is passed as the second argument.  Empty INFO files may have
+items added using InfoDefineItem().  File creation status is returned.
+
+To delete an existing INFO file, a call is made to InfoDeleteFile().
+
+        short int InfoDeleteFile( name )
+
+        char *name;
+
+InfoDeleteFile() deletes an existing INFO file.  If the file is an
+external file, only the files maintained internally within INFO are
+removed -- the external file is not deleted.  File delete stats is 
+returned.
+
+Following the successful opening of an INFO file, records are read, one
+at a time, by calling InfoReadRecord().
+
+	short int InfoReadRecord( ifp, record )
+
+	InfoFile *ifp; 
+	long int record;
+
+InfoReadRecord() reads a single record from an open INFO file based on
+an InfoFile pointer and a record number.  The record is placed in the
+InfoFile's IOBuffer and the value for CurrentRecord within the InfoFile
+structure is updated.  An error occurs if an attempt is made to read
+from a record which does not exist, such as reading from record number
+zero or beyond the end of file.  On success, InfoReadRecord() returns a
+value of INFO_SUCCESS and on error returns a value of INFO_FAIL.
+
+To write a record to an open INFO file, a call is made to
+InfoWriteRecord().
+
+	short int InfoWriteRecord( ifp, record )
+
+	InfoFile *ifp; 
+	long int record;
+
+InfoWriteRecord() writes a record to an open INFO file based on an
+InfoFile pointer and a record number.  The contents of the InfoFile's
+IOBuffer are written to the open INFO file at the record position
+specified.  An error occurs if an attempt is made to write to a record
+number less than zero or to a record number greater than one record
+beyond the current number of records.  Additionally, an error occurs if
+an attempt is made to write to an INFO file which has been opened read
+only (using the macro InfoREAD).  On success, InfoWriteRecord() returns
+a value of INFO_SUCCESS, on error returns a value of INFO_FAIL.
+
+To read or write the next record in succession, a call is made to
+InfoReadNextRecord() or InfoWriteNextRecord().
+
+        short int InfoReadNextRecord( ifp )
+
+        InfoFile *ifp;
+
+        short int InfoWriteNextRecord( ifp )
+
+        InfoFile *ifp;
+
+The value of INFO_SUCCESS is returned on success, INFO_FAIL is returned
+on error.
+
+To flush an open INFO file, a call is made to InfoFileFlush().
+ 
+        short int InfoFileFlush( ifp ) 
+  
+        InfoFile *ifp;  
+
+InfoFileFlush() flushes the open FILE using the fflush() function.  A
+value of INFO_FAIL is returned if the file is not open for write, a
+value of INFO_SUCCESS is returned on success.
+
+Following a successful call to InfoReadRecord(), the data values within
+an InfoFile's IOBuffer are accessed using the INFO file's items.  This
+process consists of, first, reading the item's definition from the NIT
+file, followed by extracting (decoding) or inserting (encoding) the
+values from or into the IOBuffer.  To return an item's definition, a
+call is made to InfoGetItemDef().
+
+	InfoItemDef *InfoGetItemDef( ifp, itemname )
+
+	InfoFile *ifp; 
+	char *itemname;
+
+InfoGetItemDef() returns the input item's definition via a structure
+pointer to type InfoItemDef.  An item's definition includes the item's
+record position, width, type, output width, and number of decimals.
+Item definitions for regular, redefined and the pseudo item $RECNO can
+be returned with InfoGetItemDef().  On success, InfoGetItemDef()
+returns a valid structure pointer of type InfoItemDef, on error returns
+a value of (InfoItemDef *) NULL.
+
+Similar to InfoFileExists(), InfoItemExists() tests for the existence
+of an item on the input INFO file.
+
+	short int InfoItemExists( ifp, itemname )
+
+	InfoFile *ifp; 
+	char *itemname;
+
+If the item exists on the input INFO file, a value of INFO_SUCCESS is
+returned.  If the item does not exist, or an error occurs, a value of
+INFO_FAIL is returned.
+
+To extract an item's value from an InfoFile's IOBuffer, a call is made
+to InfoDecode().
+
+	short int InfoDecode( ifp, idp, str, dptr )
+
+	InfoFile *ifp; 
+	InfoItemDef *idp; 
+	char *str; 
+	double *dptr;
+
+InfoDecode() extracts data values from the input InfoFile's IOBuffer
+based on the item's position, width, and type.  Returned values are
+placed in the buffers pointed to by str or dptr.  Character values are
+returned as NULL terminated strings and are right padded with blanks
+(ASCII 32) as needed to return the full item's width.  The infostr.c
+function CompressString() may be used to remove trailing blanks as per
+application requirements.  All numeric values are returned via the
+buffer pointed to by dptr.  It is the responsibility of the calling
+program to convert the returned double values to int or float types
+where appropriate.  InfoDecode() assumes that a record has been read
+from an open INFO file using InfoReadRecord().  InfoDecode() supports
+the following INFO data types:
+
+        D - date (INFO_DATE_TYPE)
+	C - character (INFO_CHARACTER_TYPE)
+	I - integer (INFO_INTEGER_TYPE)
+	N - numeric (INFO_NUMERIC_TYPE)
+	B - binary (2 and 4 byte) (INFO_BINARY_TYPE)
+	F - float (4 and 8 byte) (INFO_FLOAT_TYPE)
+	$RECNO - record number pseudo item (INFO_RECNO_TYPE)
+
+On success, InfoDecode returns a value of INFO_SUCCESS, on error
+returns a value of INFO_FAIL.
+
+The opposite process of decoding an item value from the IOBuffer, is to
+encode an item value into the IOBuffer.  To encode an item value, a
+call is made to InfoEncode().
+
+	short int InfoEncode( ifp, idp, str, dval )
+
+	InfoFile *ifp; 
+	InfoItemDef *idp; 
+	char *str; 
+	double dval;
+
+InfoEncode() inserts an item's value into the InfoFile's IOBuffer based
+on the item's position, width, and type.  String values are encoded
+from the buffer pointed to by str.  String values are truncated where
+necessary to fit the character item's width.  All numeric values are
+encoded from dval.  It is the responsibility of the calling program to
+convert int and float types to double prior to calling InfoEncode().
+InfoEncode() supports the following INFO data types:
+
+        D - date (INFO_DATE_TYPE)
+	C - character (INFO_CHARACTER_TYPE)
+	I - integer (INFO_INTEGER_TYPE)
+	N - numeric (INFO_NUMERIC_TYPE)
+	B - binary (2 and 4 byte) (INFO_BINARY_TYPE)
+	F - float (4 and 8 byte) (INFO_FLOAT_TYPE)
+
+On success, InfoEncode returns a value of INFO_SUCCESS, on error
+returns a value of INFO_FAIL.
+
+To define a new item, a call is made to InfoDefineItem().
+
+        short int InfoDefineItem( name, itemname, width, output, 
+             type, numdec )
+
+        char *name;
+        char *itemname;
+        short int width;
+        short int output;
+        long int type;
+        short int numdec;
+
+InfoDefineItem() defines a new item on an empty INFO file.  The empty
+INFO file has been created using InfoCreateFile().  The newly defined
+item is appended to the INFO file's template.  Values for type should
+should use the item type macros as defined by the following set:
+
+        D - date (INFO_DATE_TYPE)
+        C - character (INFO_CHARACTER_TYPE)
+        I - integer (INFO_INTEGER_TYPE)
+        N - numeric (INFO_NUMERIC_TYPE)
+        B - binary (2 and 4 byte) (INFO_BINARY_TYPE)
+        F - float (4 and 8 byte) (INFO_FLOAT_TYPE)
+
+On success, InfoDefineItem() returns a value of INFO_SUCCESS, on error
+returns a value of INFO_ERROR.
+
+To return the memory used by an InfoItemDef to free memory, a call is
+made to InfoItemDefFree().
+
+        void InfoItemDefFree( idp )
+
+        InfoItemDef *idp;
+
+This function does not have a return value.
+
+To generate ARC/INFO coverage file names, a call is made to
+InfoCoverFileName().
+
+        short int InfoCoverFileName( inname, type, outname )
+
+        char *inname;
+        short int type;
+        char *outname;
+
+InfoCoverFileName() takes an input ARC/INFO coverage name and a
+coverage file type and returns an output INFO coverage file name.  A
+return value of INFO_SUCCESS is returned on success, a value of
+INFO_FAIL is returned on error.  The valid coverage file name types
+are:
+
+          INFO_COVER_PAT   - Cover PAT
+          INFO_COVER_AAT   - Cover AAT
+          INFO_COVER_NAT   - Cover NAT
+          INFO_COVER_BND   - Cover BND
+          INFO_COVER_TIC   - Cover TIC
+          INFO_COVER_ACODE - Cover ACODE
+          INFO_COVER_ADD   - Cover ADD
+          INFO_COVER_TRN   - Cover TRN
+
+To generate a temporary INFO file name, a call is made to
+InfoTempName().
+
+        short int InfoTempName( infodir, outname )
+
+        char *infodir;
+        char *outname;
+
+InfoTempName() generates a temporary INFO file name for the input INFO
+directory.  A return value of INFO_SUCCESS is returned on success, a
+value of INFO_FAIL is returned on error.
+
+Two utility functions are included for the searching of an item's value
+in an open INFO file.  InfoSeqSearch() performs a sequential search,
+while InfoBinarySearch() performs a binary search.  Both functions have
+similar calling sequences:
+
+	short int InfoSeqSearch( ifp, idp, str, ival, record )
+
+	InfoFile *ifp; 
+	InfoItemDef *idp; 
+	char *str; 
+	long int ival; 
+	long int *record;
+
+
+	short int InfoBinarySearch( ifp, idp, str, ival, record )
+
+	InfoFile *ifp; 
+	InfoItemDef *idp; 
+	char *str; 
+	long int ival; 
+	long int *record;
+
+InfoSeqSearch() and InfoBinarySearch() search for either character or
+integer type (INFO_CHARACTER_TYPE, INFO_INTEGER_TYPE, INFO_BINARY_TYPE,
+or INFO_RECNO_TYPE) values in an open INFO file.  Both functions return
+the record number of the first matching record on success.  The value
+for CurrentRecord and the contents of the InfoFile's IOBuffer are
+updated appropriately.  InfoBinarySearch assumes that the INFO file is
+sorted on the search item while InfoSeqSearch does not assume any
+particular order.  On success, both functions return a value of
+INFO_SUCCESS, on error they return a value of INFO_FAIL.
+
+To return a pointer to an array of structures of type InfoItemDef.
+This array of structures is typedef'ed to TemplateList.  A TemplateList
+array contains item definitions for all real items from the input
+InfoFile (non-redefined items only).
+
+	TemplateList *InfoGetTemplate( ifp )
+
+	InfoFile *ifp;
+
+The return value from InfoGetTemplate() is a pointer of type
+TemplateList which can be used to operate on all items within a file.
+On success, InfoGetTemplate() returns a pointer to type TemplateList,
+on error returns a value of (TemplateList *) NULL.
+
+To return the memory allocated to a TemplateList, a call is made to
+InfoFreeTemplate().
+
+        short int InfoFreeTemplate( tlp )
+
+        TemplateList *tlp;
+
+This function returns a value of INFO_SUCCESS.
+
+
+Structure Access Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Structure access functions are provided to return values from the
+InfoFile and InfoItemDef structures.  These functions should be used
+whenever access the InfoFile and InfoItemDef structure members.  The
+following functions and return values are provided.
+
+InfoFile
+
+        long int InfoNumberRecords( ifp ) 
+             Returns the number of records in the INFO file.
+
+        short int InfoNumberItems( ifp )
+             Returns the number of regular items in the INFO file.
+
+        long int InfoRecordLength( ifp )
+             Returns the INFO file record length.
+
+        short int InfoIsOpenForWrite( ifp )
+             Returns INFO_SUCCESS if INFO file is open for write,
+        otherwise returns INFO_FAIL.
+
+        long int InfoCurrentRecord( ifp )
+             Returns the current record number.
+
+InfoItemDef
+
+        short int InfoItemPosition( idp )
+             Returns the input item's file position.
+
+        short int InfoItemWidth( idp )
+             Returns the input item's width.
+
+        short int InfoItemType( idp )
+             Returns the input item's item type.
+
+        short int InfoItemNumberDecimals( idp )
+             Returns the input item's number of decimals.
+
+        short int InfoItemOutputWidth( idp )
+             Returns the input item's output width.
+
+
+
+Example User Program
+~~~~~~~~~~~~~~~~~~~~
+
+To illustrate the use of infolib, the user program getcode.c is
+presented.  getcode.c is a simple program which searches an input INFO
+lookup table with a code description and returns a code value.  Results
+are returned from getcode.c to the calling AML procedure by writing the
+results to a temporary AML followed by running the temporary AML.
+getcode.c has the following command-line usage:
+
+	usage: getcode <table> <variable> <description>
+
+where:
+	<table> = the file pathname to the lookup table INFO file
+	<variable> = the name of an AML global variable which will be
+                       used to return the results to the calling AML 
+                       program
+	<description> = the search description value
+
+In the implementation presented here, getcode.c assumes the following
+INFO file template:
+
+ DATAFILE NAME: TEST.LUT 04/06/1992
+    2 ITEMS: STARTING IN POSITION 1
+ COL ITEM NAME 		WDTH 	OPUT 	TYP 	N.DEC ALTERNATE NAME
+    1 CODE 		2     	5 	B 	-
+    3 DESCRIPTION 	60 	60 	C 	-
+
+where:
+
+	CODE = item containing the code value to return
+	DESCRIPTION = item containing the English language description
+                        of CODE
+
+When called from within an ARCEDIT AML, the calling sequence for
+getcode may be as follows:
+
+&system getcode road_code.lut .road_code 'Single Lane Highway' > tmp.aml 
+&r tmp.aml 
+
+&if ^ %.INFOStatus% &then
+  &return &error Error getting code value.  
+
+calculate road_code = %.road_code%
+
+
+The first line uses the AML directive &system to run the getcode
+executable.  c-shell redirection (">") is used to direct getcode's
+stdout to a temporary AML named tmp.aml.  The next line runs tmp.aml
+which brings getcode's results into the AML environment.  The run-time
+status of getcode is checked by testing and branching on the value of
+.INFOStatus.  If .INFOStatus is set to .false., an error has occurred
+in getcode.  If .INFOStatus is set to .true., a successful call to
+getcode is assumed and the returned value contained in .road_code is
+used to calculate the new item value.
+
+An examination of the getcode.c source follows.  The header portion and
+in-line comments have been removed from the getcode.c source in
+interest of saving space.  Line numbers have been added to aid in this
+discussion.  Lines 1-7 set up the required #include files and macro
+definitions.  Line 18 tests for the appropriate number of command-line
+arguments.  On error, the macro FatalError() is executed which displays
+an error message on stderr, in this case the command-line usage, which
+is followed by the output of the AML string "&s
+.INFOStatus := .false." to stdout, followed by program termination.
+Lines 19-21 assign temporary string pointers to the command-line
+arguments.  InfoOpenFile() is called (line 22), which returns a pointer
+to type InfoFile.  This pointer is used to get the item definitions for
+the CODE and DESCRIPTION items (lines 24 and 26).  The item names may
+have been specified as command-line arguments, but have been defined as
+macros here for simplicity.  InfoSeqSearch() is called (line 28) to
+search the input file for the first record matching the value of
+Description.  Following a successful search, the item value for CODE is
+decoded from the IOBuffer using InfoDecode() and the InfoItemDef
+pointer CodeItemPtr.  The decoded results are returned via the buffers
+RetString or RetDouble depending on item type of CODE.  The switch
+block (lines 32-47) is used to format the return value of CODE, again
+based on the item type of CODE.  Use of the switch block provides
+flexibility in defining the item type of CODE.  The INFO file is closed
+(line 48) which frees the InfoFile structure memory.  Finally, the
+value for CODE is formatted for the temporary AML and written to stdout
+(line 50).  Additionally, the AML string "&s
+.INFOStatus := .true." is written to stdout (line 51) to indicate a
+successful call to getcode.  It is assumed that the calling AML
+procedure has redirected getcode's stdout to a file and will run the
+file following getcode's completion.
+
+
+getcode.c Source
+~~~~~~~~~~~~~~~~
+
+1	#include <stdio.h> 
+2	#include <string.h> 
+3	#include "infolib.h"
+
+4	#define USAGE "usage: getcode <table> <variable> <description>" 
+5	#define DESC_ITEM "DESCRIPTION"
+6	#define CODE_ITEM "CODE" 
+7	#define FatalError( mess ) { fprintf( stderr, "%s\n", mess ); \
+	  fprintf( stdout, "&s .INFOStatus := .false.\n" ); exit( 1 ); }
+
+8	void main( argc, argv ) 
+9	int argc; 
+10	char **argv;
+11	{ 
+12	    char         *InfoFilePath, *OutVariable, *Description;
+13 	    InfoFile     *FilePtr; 
+14	    InfoItemDef  *DescItemPtr, *CodeItemPtr; 
+15	    char          RetString[4096], tmpstr[4096]; 
+16	    double        RetDouble; 
+17	    long int      RecordNumber = 0;
+
+18	    if( argc != 4 ) FatalError( USAGE );
+
+19	    InfoFilePath = argv[1]; 
+20	    OutVariable = argv[2];
+21	    Description = argv[3];
+
+22	    if(( FilePtr = InfoOpenFile( InfoFilePath, InfoREAD ))
+	        == ( InfoFile * ) NULL ) 
+23	 	FatalError( USAGE );
+
+24	    if(( DescItemPtr = InfoGetItemDef( FilePtr, DESC_ITEM ))
+	        == ( InfoItemDef * ) NULL ) 
+25	 	FatalError( "Error getting DESCRIPTION item definition." );
+
+26	    if(( CodeItemPtr = InfoGetItemDef( FilePtr, CODE_ITEM ))
+	        == ( InfoItemDef * ) NULL ) 
+27	 	FatalError( "Error getting CODE item definition." );
+
+28	    if( ! InfoSeqSearch( FilePtr, DescItemPtr, Description, 0,
+	        &RecordNumber )) 
+29	 	FatalError( "Error searching file." );
+
+30	    if( ! InfoDecode( FilePtr, CodeItemPtr, RetString,
+	        &RetDouble )) 
+31	 	FatalError( "Decode error.");
+
+32	    switch( InfoItemType( CodeItemPtr ))
+33	    { 
+34	 	case INFO_DATE_TYPE      : 
+35	 	case INFO_CHARACTER_TYPE : 
+36	 		strcat( tmpstr, RetString ); break;
+
+37	 	case INFO_INTEGER_TYPE : 
+38	 		sprintf( tmpstr, "%d", ( int) RetDouble ); break;
+
+39	 	case INFO_NUMBER_TYPE : 
+40	 		sprintf( tmpstr, "%f", RetDouble ); break;
+
+41	 	case INFO_BINARY_TYPE : 
+42	 		sprintf( tmpstr, "%d", ( int) RetDouble ); break;
+
+43	 	case INFO_FLOATING_TYPE : 
+44	 		sprintf( tmpstr, "%f", RetDouble ); break;
+
+45	 	default : 
+46	 		FatalError( "Invalid item type." ); 
+47	    }
+
+48	    if( ! InfoCloseFile( FilePtr )) 
+49	 	FatalError( "Error closing file." );
+
+50	    fprintf( stdout, "&s %s := %s\n", OutVariable, tmpstr );
+51	    fprintf( stdout, "&s .INFOStatus := .true.\n" );
+
+52	}
+
+getcode.c is compiled under SunOS using the following syntax:
+
+cc -o getcode getcode.c -I/sleet1/todd/infolib /sleet1/todd/infolib/infolib.a
+
+This syntax provides pathnames to the infolib.h header file and the
+infolib.a archive file.
+
+
+Conclusion 
+~~~~~~~~~~
+
+This paper has described a set of C language functions for accessing
+INFO files called infolib.  infolib provides the core capabilities to
+support INFO file access, including file creation, deletion, open, read, 
+write, and close.  The paper has discussed infolib's source code, the
+user-level functions, and has provided an example program.  The infolib
+source and example programs are available via return email from the
+author.
+
+
+Appendix A
+~~~~~~~~~~
+
+This appendix contains additional information about infolib Revision 
+1.1.  It contains the following sections:
+
+  Overview - This section describes what is new in infolib revision 
+    1.1.  This information supplements the information contained 
+    in the user documentation.
+
+  Bug Fixes - This section describes bug fixes which have been 
+    incorporated into this revision.
+
+  Changes - This section describes changes which have been made 
+    in this release which may affect user programs.  Efforts have 
+    been made to only make changes to existing function calling 
+    syntaxes and return values when required.
+
+
+What's New
+~~~~~~~~~~
+
+- Support for ULTRIX by implementation of a byte-swapping module.  A
+new module, infoswap, has been added to perform short and long integer
+byte-swapping for DEC ULTRIX machines.  Short and long integers from
+the DR9 and NIT files required by infolib are swapped, as well as 2 and
+4 byte BINARY items in the functions InfoDecode() and InfoEncode().
+
+- INFO file create, file delete and define item.  File creation, deletion
+and item definition have been added using the functions InfoCreateFile(),
+InfoDeleteFile(), and InfoDefineItem().  These functions allow for the 
+creation, deletion and definition of new INFO files.
+
+- Structure access functions.  Structure access functions have been
+added to provide user program access to the InfoFile and InfoItemDef
+structures.  User programs may use the structure access functions or
+reference the structure members directly.
+
+- InfoDecode/InfoEncode optimization.  The decode and encode function
+internal have been revised for optimization.  Further optimization of
+these functions may be gained using various complier optimization
+flags.
+
+- A user InfoItemDef memory deallocation function has been added.  The
+new function InfoItemDefFree() can be used to return item definition
+structure memory to free memory.
+
+- INFO file record access functions have been moved into a new module,
+inforec.c.  Additional functions InfoReadNextRecord() and
+InfoWriteNextRecord() have been added.
+
+- A name generation module has been added.  This module, infoname.c,
+contains functions for generating ARC/INFO coverage INFO file names and
+temporary INFO file names.
+
+- Functions which return a true/false status have been updated to
+return the values of INFO_SUCCESS or INFO_FAIL.
+
+- The pathname parsing function has been modified to test for both ":"
+and "!" INFO file path delimiters.  However, "!" delimiter still may
+causes problems when invoking infolib programs from a /bin/csh prompt.
+
+- Support for DATE item types has been added.  The decode and encode
+functions will operate on DATE item, however it it up to the user's
+program to format the date field into the correct format.
+
+- A directory of infolib programming examples has been included in the
+distribution.  This directory, ./examples, includes a small set of
+infolib utility programs.
+
+- A complete list of new user-level functions is contained below.  The
+new functions are listed by source file.
+
+  infofile.c:
+
+  InfoCreateFile() - creates a new empty INFO file
+  InfoDeleteFile() - deletes an existing INFO file
+  InfoFileFlush() - flushes an open INFO file to disk
+  InfoNumberRecords() - returns the number of records in the open 
+    INFO file
+  InfoNumberItems() - returns the number of items in the open 
+    INFO file
+  InfoRecordLength() - returns the record length in the open INFO 
+    file
+  InfoIsOpenForWrite() - returns whether the open INFO file has been 
+    opened with write access
+  InfoCurrentRecord() - returns the current record number for the 
+    open INFO file 
+
+  inforec.c:
+
+  InfoReadNextRecord() - reads the next record for the open INFO file
+  InfoWriteNextRecord() - writes to the next record for the open 
+    INFO file
+
+  infoitem.c:
+
+  InfoItemDefFree() - returns InfoItemDef memory to free memory
+  InfoDefineItem() - defines a new item on an empty INFO file
+  InfoItemPosition() - returns an item's template byte position
+  InfoItemWidth() - returns an item's width
+  InfoItemType() - returns an item's type
+  InfoItemNumberDecimals() - returns an item's number of decimals
+  InfoItemOutputWidth() - returns an item's output width
+
+  infoutil.c:
+
+  InfoFreeTemplate - returns TemplateList memory to free memory
+ 
+  infoname.c:
+
+  InfoCoverFileName() - generates ARC/INFO coverage file names
+  InfoTempName() - generates temporary INFO file names
+
+  infoswap.c:
+
+  InfoByteSwap() - perform integer byte swapping
+
+
+Bug Fixes
+~~~~~~~~~
+
+- As mentioned above, byte-swapping for ULTRIX has been added.  The
+byte-swapping functions are contained in the source files infoswap.c
+and the header file infoswap.h.  These files are automatically included
+when the target OS of ULTRIX is selected in infodefs.h.
+
+- The return value for the utility functions InfoBinarySearch() and
+InfoSeqSearch() has been changed.  On error, the search functions
+return the value of INFO_FAIL and the record number is set to -1.  If
+an error does not occur, but a matching record is not found, the
+functions return INFO_FAIL but the record number is set to 0.  These
+changes will allow user programs to determined if an error occurred
+while searching the file, or if a matching record has not been found.
+
+
+Changes
+~~~~~~~
+
+- Support for DOS has been removed from infolib revision 1.1.  Support
+for DOS has been dropped due to the additional effort required for
+testing and debugging.  However, by comparing the revision 1.0 source
+files with the current source, support for DOS could easyly be
+included.
+
+- The word parsing module infoprs.c has been removed.  The required
+functions from this module have been moved into infoname.c and
+infostr.c.
+
+- The function ItemDefFree() has been replaced with InfoItemDefFree().
+
+- The function ParsePathName() has been replaced with InfoParsePath().
+
+
+Appendix B
+~~~~~~~~~~
+
+This appendix contains additional information about infolib Revision
+1.2.  Revision 1.2 contains bug fixes and changes to support ARC/INFO
+8.3 workspaces.  Bug fixes and contributions have been made by the 
+following:
+
+Eric Weitzman, ESRI
+Russell Ease, ESRI-Australia
+Xinguo Wei, University of Washington
+
+A special thanks to Eric, Russell, and Xinguo for their contributions.

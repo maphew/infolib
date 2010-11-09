@@ -1,0 +1,340 @@
+/* DBF2COVER.AML
+/*------------------------------------------------------------------------------
+/* This utility creates a point coverage from a dbf file.
+/* It calls dbf2info to create a temporary info file of the dbf file,
+/* then calls info2cover to create a point coverage from the info file.
+/*
+/* Written: 02/25/93 Randy Deardorff
+/*
+/* History: (All changes are by the author unles otherwise noted)
+/*
+/* 05/04/93 No changes to this program but changes in info2cover affect
+/* the way this program works.  See info2cover for more.
+/*
+/* 06/18/93 Changed return status variable to .dbf2cover$ok.  Also
+/* improved error trapping.
+/*
+/* 06/23/93 Got rid of all global variables.  Now returns success status
+/* via aml$sev.  Make sure cover not already exist as file or directory.
+/*
+/* 07/19/93 Changed temporary filenames.
+/* 
+/* 05/23/94 Seek input file as is first, then try default extension.
+/*
+/* 12/28/94 Added in-line help.
+/* 
+/*------------------------------------------------------------------------------
+&args dbffile outcov xfield yfield prjfile
+&s msgstatus [show &messages]
+&s progname DBF2COVER
+&s progver 5.7 July 13, 1998
+&s gousage .false.
+&s gofailed .false.
+&s errmsg
+&s helpfile   xx[after [date -ftag] . ]hlp
+&severity &error &routine uhoh
+/*
+/*
+/* Make first argument is specified.
+/*
+&if [null %dbffile%] &then &goto usage
+&if [type %dbffile%] ne 1 &then &goto usage
+/*
+/*
+/* Check if help requested.
+/*
+&if [translate %dbffile%] eq -HELP &then
+  &goto help
+/*
+/*
+/* Make remaining arguments are specified.
+/*
+&if [null %outcov%] &then &goto usage
+&if [type %outcov%] ne 1 &then &goto usage
+&if [null %xfield%] &then &goto usage
+&if [null %yfield%] &then &goto usage
+/*
+/*
+/* If input file does not exist as specified, append default extension.
+/* If it still does not exist, fail.
+/*
+&if not [exists %dbffile% -file] &then
+  &do
+    &s dbffile %dbffile%.dbf
+    &if not [exists %dbffile% -file] &then
+      &do
+        &s errmsg DBF file %dbffile% does not exist.
+        &s gofailed .true.
+      &end
+  &end
+&if %gofailed% &then &goto failed
+/*
+/*
+/* Announce intent.
+/*
+&s outcov [translate %outcov%]
+&if [extract 1 %msgstatus%] eq &ON &then
+  &type Creating point coverage %outcov% from dbf file %dbffile%...
+/*
+/*
+/* Make sure we're in a workspace.
+/*
+&if not [exists [dir [pathname *]] -workspace] &then
+  &do
+    &s errmsg %progname%: Current location is not a workspace.
+    &s gofailed .true.
+  &end
+&if %gofailed% &then &goto failed
+/*
+/*
+/* Check output cover.
+/*
+&if [exists %outcov% -cover] &then
+  &do
+    &s errmsg Coverage %outcov% already exists.
+    &s gofailed .true.
+  &end
+&if %gofailed% &then &goto failed
+&s temp [locase %outcov%]
+&if [exists %temp% -file] or [exists %temp% -directory] &then
+  &do
+    &type File or directory %temp% already exists.
+    &s errmsg Can't create coverage %outcov%.
+    &s gofailed .true.
+  &end
+&if %gofailed% &then &goto failed
+/*
+/*
+/* Check xfield name.
+/*
+&if [type %xfield%] ne 1 &then
+  &do
+    &s errmsg %xfield% is not a valid field name.
+    &s gofailed .true.
+  &end
+&if %gofailed% &then &goto failed
+&s xfield [translate %xfield%]
+/*
+/*
+/* Check yfield name.
+/*
+&if [type %yfield%] ne 1 &then
+  &do
+    &s errmsg %yfield% is not a valid field name.
+    &s gofailed .true.
+  &end
+&if %gofailed% &then &goto failed
+&s yfield [translate %yfield%]
+/*
+/*
+/* Check project file name and set flag for whether projecting or not.
+/*
+&s doproject not [null %prjfile%]
+&if %doproject% &then
+  &do
+    &if [type %prjfile%] ne 1 &then
+      &do
+        &s errmsg %prjfile% is not a valid projection file name.
+        &s gofailed .true.
+      &end
+    &else
+      &do
+        &if %prjfile% eq # &then
+          &do
+            &s doproject .false.
+          &end
+        &else
+          &do
+            &if not [exists %prjfile% -file] &then
+              &do
+                &s errmsg Projection file %prjfile% does not exist.
+                &s gofailed .true.
+              &end
+          &end
+      &end
+  &end
+&if %gofailed% &then &goto failed
+/*
+/*
+/* Create a temporary info file from the dbf file.
+/*
+&if [extract 1 %msgstatus%] eq &ON &then
+  &type   Creating an INFO file from %dbffile%...
+&s infofile XX[after [date -ftag] .]
+&messages &off &all
+dbf2info %dbffile% %infofile%
+&if %aml$sev% ne 0 &then
+  &do
+    &s gofailed .true.
+    &s errmsg %progname% (DBF2INFO): Could not convert %dbffile% to INFO.
+  &end
+&messages %msgstatus%
+&if %gofailed% &then &goto failed
+/*
+/*
+/* Create point coverage from the info file we just created.
+/*
+&if [extract 1 %msgstatus%] eq &ON &then
+  &type   Creating %outcov%...
+&messages &off &all
+info2cover %infofile% %outcov% %xfield% %yfield% %prjfile%
+&if %aml$sev% ne 0 &then
+  &do
+    &s gofailed .true.
+    &s errmsg %progname% (INFO2COVER): Could not create %outcov%.
+  &end
+&messages %msgstatus%
+&if %gofailed% &then &goto failed
+/*
+/*
+/* Delete the temporary info file.
+/*
+&call killtemps
+/*
+/*
+/* Done.
+/*
+&messages %msgstatus%
+&return
+/*
+/*
+/* Usage return point.
+/*
+&label usage
+&messages %msgstatus%
+&type %progname% Version %progver%.
+&type Randy Deardorff, US EPA Region 10, Seattle. (rdeardor@r0serv.r10.epa.gov)
+&type Usage: %progname% <dbf_file> <outcov> <xfield> <yfield> {projection_file}
+&return &warning
+/*
+/*
+/* Failed return point.
+/*
+&label failed
+&messages %msgstatus%
+&if not [null %errmsg%] &then
+  &do
+    &type %errmsg%
+  &end
+&else
+  &do
+    &type %progname% failed.
+  &end
+&call killtemps
+&return &warning
+/*
+/*
+/* Unanticipated error.
+/*
+&routine uhoh
+&severity &error &fail
+&messages %msgstatus%
+&type %progname%: Unanticipated error.
+&call killtemps
+&return ;&return &warning
+/*
+/*
+/* Delete the temporary info file.
+/*
+&routine killtemps
+&if [variable infofile] &then
+  &do
+    &if [exists %infofile% -info] &then
+      &do
+        &if [delete %infofile% -info] ne 0 &then
+          &type Warning: Unable to delete temporary INFO file %infofile%.
+      &end
+  &end
+&if [exists %helpfile% -file] &then
+  &do
+    &if [delete %helpfile% -file] ne 0 &then
+      &type Warning: Unable to delete temporary help file %helpfile%.
+  &end
+&return
+/*
+/*
+/* Help return point.
+/*
+&label help
+&s gofailed .false.
+&s io [open %helpfile% ok -w]
+&if %ok% ne 0 &then
+  &do
+    &s gofailed .true.
+    &type %progname%: Could not open temporary file %helpfile%.
+  &end
+&if %gofailed% &then &goto failed
+&call writehelp
+&if [close %io%] ne 0 &then
+  &do
+    &s gofailed .true.
+    &type %progname%: Could not close temporary file %helpfile%.
+  &end
+&if %gofailed% &then &goto failed
+&sys more %helpfile%
+&if [delete %helpfile% -file] ne 0 &then
+  &type %progname% Warning: Could not delete temporary file %helpfile%.
+&return &warning
+/*
+/*
+/* Write help text to help file.
+/*
+&routine writehelp
+/* @ begin help
+&s x [write %io% 'Usage: DBF2COVER <dbf_file> <outcov> <xfield> <yfield> {projection_file}']
+&s x [write %io% '']
+&s x [write %io% 'Creates a point coverage from a dBASE DBF file.']
+&s x [write %io% '']
+&s x [write %io% '']
+&s x [write %io% 'Arguments:']
+&s x [write %io% '']
+&s x [write %io% '<dbf_file> -- The dBASE DBF file to convert to a coverage.']
+&s x [write %io% '']
+&s x [write %io% '<outcov> -- The name for the output coverage.']
+&s x [write %io% '']
+&s x [write %io% '<xfield> -- The name of the field that is the X coordinate.']
+&s x [write %io% '']
+&s x [write %io% '<yfield> -- The name of the field that is the Y coordinate.']
+&s x [write %io% '']
+&s x [write %io% '{projection_file} -- The projection file to be used to project the']
+&s x [write %io% '  coordinates from what they are in the dbf file to what they should be']
+&s x [write %io% '  in the coverage.']
+&s x [write %io% '']
+&s x [write %io% '']
+&s x [write %io% 'Notes:']
+&s x [write %io% '']
+&s x [write %io% 'The dbf file will first be converted to an INFO file via DBF2INFO.']
+&s x [write %io% 'See help dbf2info for details on how various data type are converted.']
+&s x [write %io% '']
+&s x [write %io% 'The dbf file must contain fields for the x and y coordinates.  Any']
+&s x [write %io% 'number of additional fields are permitted, but nothing else is']
+&s x [write %io% 'required.']
+&s x [write %io% '']
+&s x [write %io% 'Points in the output coverage will be given user ids starting with one']
+&s x [write %io% 'and incrementing up by one for each record in the dbf file.']
+&s x [write %io% '']
+&s x [write %io% 'All of the fields in the dbf file will be joined to the PAT of the']
+&s x [write %io% 'output coverage.  The dbf file itself remains unchanged.']
+&s x [write %io% '']
+&s x [write %io% 'The X and Y coordinates can be in any projection or geographic']
+&s x [write %io% 'representation supported by ARC/INFO.  Coordinates in degrees minutes']
+&s x [write %io% 'seconds may be packed together with no spaces separating the values,']
+&s x [write %io% 'ie, 1224530.9, or they may have spaces or colons, ie, 122 45 30.9, or']
+&s x [write %io% '122:45:30.9.']
+&s x [write %io% '']
+&s x [write %io% 'If you specify a projection file, it will be used to project the']
+&s x [write %io% 'coordinates from what they are in the DBF file to what they will be']
+&s x [write %io% 'in the coverage.  If the coordinates are already projected (state']
+&s x [write %io% 'plane, UTM, etc) then you don''t need to specify a projection file, but']
+&s x [write %io% 'you may if you want to.  If the coordinates are in DMS then you must']
+&s x [write %io% 'specify a projection file.']
+&s x [write %io% '']
+&s x [write %io% 'The projection file must have both input and output sections defined.']
+&s x [write %io% '']
+&s x [write %io% 'The output projection specified by the projection file will be used to']
+&s x [write %io% 'set the projection definition of the output coverage.  If you do not']
+&s x [write %io% 'specify a projection file, then the projection definition will not be']
+&s x [write %io% 'set.  If the projection file you use does not specify datum, NAD27']
+&s x [write %io% 'will be inserted.']
+/* @ end help
+&return

@@ -1,0 +1,232 @@
+/* MAKEPRJDEF.AML
+/*------------------------------------------------------------------------------
+/* Creates an input file for projectdefine from the projection file.
+/* Returns aml$sev non-zero if an error occurred.
+/*
+/* Written: 05/03/93 Randy Deardorff
+/*
+/* History: (All changes are by the author unless otherwise noted)
+/*
+/* 06/17/93 Improved error trapping.
+/* 12/23/96 Added datum nad27 unless otherwise specified.  Also skip comments.
+/*
+/*------------------------------------------------------------------------------
+&args prjfile prjdeffile
+/*
+/*
+/* Set program variables.
+/*
+&s progname MAKEPRJDEF.AML
+&s openin .false.
+&s openout .false.
+&s gofailed .false.
+&s founddatum .false.
+&s foundoutput .false.
+&s foundend .false.
+&s wroteout .false.
+&s errmsg
+&severity &error &routine uhoh
+/*
+/*
+/* Open the projection file for reading.
+/*
+&s ioin [open %prjfile% rstat -r]
+&if %rstat% ne 0 &then &do
+  &s errmsg Could not open projection file
+  &s gofailed .true.
+&end
+&if %gofailed% &then &goto failed
+&s openin .true.
+/*
+/*
+/* Open the project define file for writing.
+/*
+&s ioout [open %prjdeffile% wstat -w]
+&if %wstat% ne 0 &then &do
+  &s errmsg Could not open project define file
+  &s gofailed .true.
+&end
+&if %gofailed% &then &goto failed
+&s openout .true.
+/*
+/*
+/* Scan projection file, writing just the output section to the
+/* project define file.
+/*
+&s rstat 0
+&do &until %rstat% ne 0
+  &s rec [read %ioin% rstat]
+  &s skipit .false.
+  /*
+  /* Skip blanks and read errors.
+  /*
+  &if %rstat% ne 0 or [null %rec%] &then
+    &s skipit .true.
+  /*
+  /* Skip comments.
+  /*
+  &if not %skipit% &then &do
+    &s trec [trim %rec% -left ' ']
+    &if [length %trec%] ge 2 &then
+      &if [quote [substr %trec% 1 2]] eq '/*' &then
+        &s skipit .true.
+  &end
+  /*
+  /* Process current line.
+  /*
+  &if not %skipit% &then &do
+    &s haveoutput .false.
+    &s haveend .false.
+    &s item1 [extract 1 [unquote [translate %rec%]]]
+    &if [type %item1%] eq 1 &then
+      &select %item1%
+        &when END
+          &do
+            &s rstat 102
+            &s haveend .true.
+            &s foundend .true.
+            &s cstat [close %ioout%]
+            &s openout .false.
+          &end
+        &when OUTPUT
+          &do
+            &s haveoutput .true.
+            &s foundoutput .true.
+          &end
+      &end
+    /*
+    /*
+    /* If the current record is part of the output section write it
+    /* to the project define file.
+    /*
+    &if %openout% and %foundoutput% and not %haveoutput% &then
+      &do
+        /*
+        /* Remember if we wrote datum.
+        /*
+        &if [quote %item1%] eq 'DATUM' &then
+          &s founddatum .true.
+        /*
+        /* When we hit parameters, unless we've written a datum write one.
+        /*
+        &if [quote %item1%] eq 'PARAMETERS' and not %founddatum% &then &do
+          &s wstat [write %ioout% 'datum nad27']
+          &if %wstat% ne 0 &then &do
+            &s rstat 999
+            &s errmsg Error writing to project define file
+            &s gofailed .true.
+          &end
+        &end
+        /*
+        /* Ok, write the line we have.
+        /*
+        &if not %gofailed% &then &do
+          &s wstat [write %ioout% %rec%]
+          &if %wstat% ne 0 &then &do
+            &s rstat 999
+            &s errmsg Error writing to project define file
+            &s gofailed .true.
+          &end
+          &s wroteout .true.
+        &end
+      &end
+  &end
+&end
+/*
+/*
+/* Close files.
+/*
+&call cleanup
+/*
+/*
+/* Check for write error.
+/*
+&if %gofailed% &then &goto failed
+/*
+/*
+/* Check for read error.
+/*
+&if %rstat% ne 102 &then &do
+  &s errmsg Error reading project file
+  &s gofailed .true.
+&end
+&if %gofailed% &then &goto failed
+/*
+/*
+/* Make sure OUTPUT was found.
+/*
+&if not %foundoutput% &then &do
+  &s errmsg Projection file has no OUTPUT subcommand
+  &s gofailed .true.
+&end
+&if %gofailed% &then &goto failed
+/*
+/*
+/* Make sure END was found.
+/*
+&if not %foundend% &then &do
+  &s errmsg Projection file has no END
+  &s gofailed .true.
+&end
+&if %gofailed% &then &goto failed
+/*
+/*
+/* Make sure we wrote something.
+/*
+&if not %wroteout% &then &do
+  &s errmsg Bad or missing output section
+  &s gofailed .true.
+&end
+&if %gofailed% &then &goto failed
+/*
+/*
+/* Success!
+/*
+&return
+/*
+/*
+/* Unexpected error.
+/*
+&routine uhoh
+&severity &error &fail
+&type Unexpected error (%progname%).
+&call cleanup
+&call killoutput
+&return ;&return &warning
+/*
+/*
+/* Close files.
+/*
+&routine cleanup
+&if %openin% &then &do
+  &s cstat [close %ioin%]
+  &s openin .false.
+&end
+&if %openout% &then &do
+  &s cstat [close %ioout%]
+  &s openopt .false.
+&end
+&return
+/*
+/*
+/* Failed.
+/*
+&label failed
+&if not [null %errmsg%] &then &do
+  &type %errmsg% (%progname%).
+&end
+&else
+  &do
+    &type %progname% failed.
+  &end
+&call cleanup
+&call killoutput
+&return &warning
+/*
+/*
+/* Delete output file.
+/*
+&routine killoutput
+&if [exists %prjdeffile% -file] &then
+  &s dstat [delete %prjdeffile% -file]
+&return

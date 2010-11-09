@@ -1,0 +1,22 @@
+#! /bin/sh
+#
+# Puts the infox library out for releasing...
+#
+if [ $# -eq 0 ] ;then
+  echo "Usage: release <topath>"
+  exit
+fi
+#
+#
+#
+curpath=`pwd`
+topath=$1/infox
+#
+#
+#
+cd $curpath
+cp README         $topath
+cp release        $topath
+cp Makefile       $topath
+cp *.h            $topath
+cp *.c            $topath

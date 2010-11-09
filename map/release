@@ -1,0 +1,21 @@
+#! /bin/sh
+#
+# Puts the map library out for releasing...
+#
+if [ $# -eq 0 ] ;then
+  echo "Usage: release <topath>"
+  exit
+fi
+#
+#
+#
+curpath=`pwd`
+topath=$1/map
+#
+#
+#
+cd $curpath
+cp release        $topath
+cp Makefile       $topath
+cp *.h            $topath
+cp *.c            $topath

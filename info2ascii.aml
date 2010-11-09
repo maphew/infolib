@@ -1,0 +1,83 @@
+/* info2ascii.aml
+/* ----------------------------------------------------------------------------
+/* Creates an ascii file from an INFO data file.
+/*
+/* Written: 05/18/93 Randy Deardorff.  USEPA Seattle.  206-553-8183.
+/*                   rdeardor@r0serv.r10.epa.gov
+/*
+/* History: (All changes are by the author unless otherwise noted)
+/* 
+/* 08/24/94 Rewrote as simple driver for the C program, which now does all
+/* the work.  See the C code for details.  Special args used here are for
+/* calling from AML only.
+/*
+/* 12/28/94 Added in-line help.
+/* 
+/* ----------------------------------------------------------------------------
+&args regularargs:rest
+&s utilpath /usr/tmp/dbf2info/
+&s msgstatus [show &messages]
+&s progname INFO2ASCII
+&s progver 5.7 July 13, 1998
+&s failed .false.
+/*
+/*
+/* Check if help requested.
+/*
+&s x [translate [extract 1 %regularargs%]]
+&if %x% eq -HELP &then
+  &do
+    /*
+    /* Help requested.
+    /*
+    &sys %utilpath%info2ascii %x%
+  &end
+&else
+  &do
+    /*
+    /* Not help.  Normal operation.
+    /*
+    /* Set silent or verbose mode.
+    /*
+    &if [translate [extract 1 %msgstatus%]] eq &OFF &then
+      &s vopt -s
+    &else
+      &s vopt -v
+    /*
+    /*
+    /* Set error flag file name and create it.
+    /*
+    &s errfile xx[date -ftag]
+    &if [exists %errfile% -file] &then
+      &if [delete %errfile% -file] ne 0 &then
+        &s failed .true.
+    &if %failed% &then
+      &return &warning %progname%: Could not delete temporary file %errfile%.
+    &s ioerr [open %errfile% iostat -write]
+    &if %iostat% ne 0 &then
+      &return &warning %progname%: Could not open temporary file %errfile%.
+    &if [close %ioerr%] ne 0 &then
+      &return &warning %progname%: Could not close temporary file %errfile%.
+    /*
+    /*
+    /* Call the C program to do the job.
+    /*
+    &sys %utilpath%info2ascii %vopt% %errfile% [unquote %regularargs%]
+    /*
+    /*
+    /* Check success of C program.
+    /*
+    &if [exists %errfile% -file] &then
+      &do
+        &s dummy [delete %errfile% -file]
+        &s failed .true.
+      &end
+  &end
+/*
+/*
+/* Return appropriate severity to calling program.
+/*
+&if %failed% &then
+  &return &warning
+&else
+  &return

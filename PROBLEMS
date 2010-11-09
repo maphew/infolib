@@ -1,0 +1,38 @@
+PROBLEMS file for the EPA region 10 dbf utility package.
+
+This file describes problems and that may arise, and possible
+solutions.
+
+
+PROBLEM: The main Makefile fails to build the main executable files,
+giving an error similar to:
+ld: /usr/lib/libm.a: fatal error: cannot open file for reading
+
+SYSTEMS: Any.
+
+FIX: Edit the main Makefile, changing the value of $MATHLIB from
+/usr/lib/libm.a to whatever the full path to the math library is
+on your system.  You might also be able to substitute "-lm".
+
+
+PROBLEM: The library misclib fails to build, with undefined symbol
+"getcwd" in file syscwd.c.
+
+SYSTEMS: Any without a getcwd system call, ie, some BSD systems (?).
+
+FIX: Edit misc/syscwd.c to call getwd rather than getcwd, and don't
+pass the length, ie, change
+    getcwd(buffer,MAXPATHLEN);
+to
+    getwd(buffer);
+This fix is untested (all my systems have getcwd) but might work.
+
+
+PROBLEM: When passing a very long list of arguments, the programs work
+fine from the system prompt, but mess up from the ARC prompt.
+
+SYSTEMS: Any.
+
+FIX: This is caused by the limited length of variables in AML.  The
+only solution is to run the program from the system level via &sys.
+

@@ -1,0 +1,17 @@
+/* dbflist.aml
+/*----------------------------------------------------------------------------
+/* Written: 05/20/94 Randy Deardorff.  USEPA Seattle.  206-553-8183.
+/*                   rdeardor@r0serv.r10.epa.gov
+/*
+/* This is a simple AML driver for dbflist so it can be installed as an
+/* ARC/INFO atool.
+/*
+/* Modification log: (All changes are by the author unless otherwise noted)
+/*----------------------------------------------------------------------------
+&args dbffile otherargs:rest
+&s utilpath /usr/tmp/dbf2info/
+&if [null %dbffile%] &then
+  &sys %utilpath%dbflist
+&else
+  &sys %utilpath%dbflist %dbffile% [unquote %otherargs%]
+&return

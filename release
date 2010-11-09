@@ -1,0 +1,390 @@
+#! /bin/sh
+# ------------------------------------------------------------------------
+# release
+#
+# Makes a release of the dbf2info package.
+#
+# You can use it to make releases to give to other people.
+#
+# If you are feeling especially altruistic, you can even make a
+# pre-compiled release for your platform.  If you make one, and let me
+# know, I'll get it and put it on ftp.epa.gov for others to get.
+#
+# ------------------------------------------------------------------------
+#
+#
+# Set type of release to make.
+#
+#   1 = pre-compiled, no source.
+#   2 = source only, no pre-compiled.
+#   3 = source AND pre-compiled together in one release.
+#
+release_type=2
+#
+#
+# Set a temporary place to put the released files.
+# If the tmp directory exists, it will be renamed as -old.
+# If the -old tmp exists, it will be deleted.
+#
+tmp=/usr132/rbd/xxdbftemp
+#
+#
+# Set a place to put the tar file(s).
+#
+release_path=/usr132/rbd/releases
+#
+#
+# Set whether or not to create the release tar files.
+#
+make_compressed_tar=1
+make_gzipped_tar=1
+#
+#
+# Set an abbreviation you your machine.
+# This is used only if you are doing a pre-compiled release.
+# It becomes part of the filename, eg, dbf-5.5.DGUX.tar.Z, or
+# dbf-5.5.SUNOS.tar.Z, etc.
+#
+machine_tag='IRIX'
+machine_tag='SUNOS'
+machine_tag='SOLARIS'
+machine_tag='OSF'
+machine_tag='AIX'
+machine_tag='DGUX'
+#
+#
+# Set whether or not to delete the tmp directory after taring.
+# This is only done if set to 1 AND one of the make_*_tar options are also 1.
+#
+rm_tmp_after_tar=1
+#
+#
+# --------------------------------------------------
+# You should not have to change anything below here.
+# --------------------------------------------------
+#
+# Set up.
+#
+dbfhome=`pwd`
+dbf_rev=5.7
+tempfile=xxdbfrel.tmp
+#
+# Retain old release directory if it exists.
+#
+if [ -d $tmp ] ;then
+  if [ -d $tmp'-old' ] ;then
+    rm -r $tmp'-old'
+  fi
+  mv $tmp $tmp'-old'
+fi
+mkdir $tmp
+#
+# Copy the headers, makefiles, libraries, etc.
+#
+if [ $release_type -gt 1 ] ;then
+  cd $tmp
+  cp $dbfhome/rbdpaths.h      $tmp
+  cp $dbfhome/Makefile        $tmp
+  cp $dbfhome/swaptest.c      $tmp
+  cp $dbfhome/swaptest.dbf    $tmp
+  cp $dbfhome/release         $tmp
+  mkdir dbf
+  cd $dbfhome/dbf
+  release $tmp
+  cd $tmp
+  mkdir infox
+  cd $dbfhome/infox
+  release $tmp
+  cd $tmp
+  mkdir misc
+  cd $dbfhome/misc
+  release $tmp
+  cd $tmp
+  mkdir map
+  cd $dbfhome/map
+  release $tmp
+  cd $dbfhome
+fi
+#
+# General stuff.
+#
+cd $dbfhome
+cp README          $tmp
+cp CHANGES         $tmp
+cp TODO            $tmp
+cp PROBLEMS        $tmp
+cp dbfinstall      $tmp
+cp dbfinstall.help $tmp
+#
+# Verification files.
+#
+cp sample1.dat     $tmp
+cp sample1.dbf     $tmp
+cp sample1.dbi     $tmp
+cp sample1.def     $tmp
+#
+# Dbf2info and info2dbf.
+#
+cd $dbfhome
+cp dbf2info.aml    $tmp
+cp info2dbf.aml    $tmp
+if [ $release_type -gt 1 ] ;then
+  cp dbf2info.c    $tmp
+  cp info2dbf.c    $tmp
+fi
+if [ $release_type -eq 1 -o $release_type -eq 3 ] ;then
+  cp dbf2info      $tmp
+  cp info2dbf      $tmp
+fi
+#
+# Dbf2cover.
+#
+cd $dbfhome
+cp dbf2cover.aml     $tmp
+#
+# Info2ascii and ascii2info.
+#
+cd $dbfhome
+cp ascii2info.aml    $tmp
+cp info2ascii.aml    $tmp
+if [ $release_type -gt 1 ] ;then
+  cp ascii2info.c    $tmp
+  cp info2ascii.c    $tmp
+fi
+if [ $release_type -eq 1 -o $release_type -eq 3 ] ;then
+  cp ascii2info      $tmp
+  cp info2ascii      $tmp
+fi
+#
+# Info2cover.
+#
+cd $dbfhome
+cp info2cover.aml   $tmp
+cp checkprj.aml     $tmp
+cp makeprjdef.aml   $tmp
+if [ $release_type -gt 1 ] ;then
+  cp makecoocoo.c   $tmp
+  cp makegencoo.c   $tmp
+fi
+if [ $release_type -eq 1 -o $release_type -eq 3 ] ;then
+  cp makecoocoo     $tmp
+  cp makegencoo     $tmp
+fi
+#
+# Dbflook, dbflist and dbfitems.
+#
+cd $dbfhome
+cp dbflist.aml    $tmp
+cp dbfitems.aml   $tmp
+cp dbflook.aml    $tmp
+if [ $release_type -gt 1 ] ;then
+  cp dbflist.c    $tmp
+  cp dbfitems.c   $tmp
+  cp dbflook.c    $tmp
+fi
+if [ $release_type -eq 1 -o $release_type -eq 3 ] ;then
+  cp dbflist      $tmp
+  cp dbfitems     $tmp
+  cp dbflook      $tmp
+fi
+#
+# Infodir, infodel, infolook, infolist and infoitems.
+#
+cd $dbfhome
+cp infodir.aml     $tmp
+if [ $release_type -gt 1 ] ;then
+  cp infodir.c     $tmp
+  cp infodel.c     $tmp
+  cp infolist.c    $tmp
+  cp infoitems.c   $tmp
+  cp infolook.c    $tmp
+fi
+if [ $release_type -eq 1 -o $release_type -eq 3 ] ;then
+  cp infodir       $tmp
+  cp infodel       $tmp
+  cp infolist      $tmp
+  cp infoitems     $tmp
+  cp infolook      $tmp
+fi
+#
+# Pre-configure some files.
+#
+cd $tmp
+#
+# Edit the released copy of the main Makefile to get rid of /usr/include.
+#
+if [ $release_type -gt 1 ] ;then
+  filename=Makefile
+  oldstring1='\/usr\/include\/rbdpaths.h'
+  newstring1=rbdpaths.h
+  sed -e "s/$oldstring1/$newstring1/g" $filename > $tempfile
+  mv $tempfile $filename
+fi
+#
+# Edit all the AMLs to use a temporary path for utilpath.
+#
+oldstring1='s utilpath.*'
+newstring1='s utilpath \/usr\/tmp\/dbf2info\/'
+for filename in *.aml
+  do
+  sed -e "s/$oldstring1/$newstring1/g" $filename > $tempfile
+  mv $tempfile $filename
+done
+#
+# Edit released copy of rbdpaths.h to use a temporary path for .h locations.
+#
+if [ $release_type -gt 1 ] ;then
+  filename=rbdpaths.h
+  oldstring1='define MISC_H.*'
+  oldstring2='define MAP_H.*'
+  oldstring3='define INFO_H.*'
+  oldstring4='define INFOLIB_H.*'
+  oldstring5='define INFODEFS_H.*'
+  oldstring6='define INFOSWAP_H.*'
+  oldstring7='define DBF_H.*'
+  oldstring8='define DBFSYS_H.*'
+  oldstring9='define E00_H.*'
+  newstring1='define MISC_H     \"'$dbfhome'/misc/misc.h\"'
+  newstring2='define MAP_H      \"'$dbfhome'/map/map.h\"'
+  newstring3='define INFO_H     \"'$dbfhome'/infox/infox.h\"'
+  newstring4='define INFOLIB_H  \"'$dbfhome'/infox/infolib.h\"'
+  newstring5='define INFODEFS_H \"'$dbfhome'/infox/infodefs.h\"'
+  newstring6='define INFOSWAP_H \"'$dbfhome'/infox/infoswap.h\"'
+  newstring7='define DBF_H      \"'$dbfhome'/dbf/dbf.h\"'
+  newstring8='define DBFSYS_H   \"'$dbfhome'/dbf/dbfsys.h\"'
+  newstring9='define E00_H      \"'$dbfhome'/e00/e00.h\"'
+  newstring1=`echo ${newstring1} | sed s%/%\\\\\\\/%g`
+  newstring2=`echo ${newstring2} | sed s%/%\\\\\\\/%g`
+  newstring3=`echo ${newstring3} | sed s%/%\\\\\\\/%g`
+  newstring4=`echo ${newstring4} | sed s%/%\\\\\\\/%g`
+  newstring5=`echo ${newstring5} | sed s%/%\\\\\\\/%g`
+  newstring6=`echo ${newstring6} | sed s%/%\\\\\\\/%g`
+  newstring7=`echo ${newstring7} | sed s%/%\\\\\\\/%g`
+  newstring8=`echo ${newstring8} | sed s%/%\\\\\\\/%g`
+  newstring9=`echo ${newstring9} | sed s%/%\\\\\\\/%g`
+  sed -e "
+  s/$oldstring1/$newstring1/g
+  s/$oldstring2/$newstring2/g
+  s/$oldstring3/$newstring3/g
+  s/$oldstring4/$newstring4/g
+  s/$oldstring5/$newstring5/g
+  s/$oldstring6/$newstring6/g
+  s/$oldstring7/$newstring7/g
+  s/$oldstring8/$newstring8/g
+  s/$oldstring9/$newstring9/g
+  " $filename > $tempfile
+  mv $tempfile $filename
+fi
+#
+# Set switches to defaults in the released copy of dbfinstall.
+#
+filename=dbfinstall
+oldstring1='install_arc=.*'
+newstring1='install_arc=1'
+oldstring2='install_unix=.*'
+newstring2='install_unix=0'
+oldstring3='do_debug_arc_install=.*'
+newstring3='do_debug_arc_install=0'
+oldstring4='do_debug_unix_install=.*'
+newstring4='do_debug_unix_install=0'
+sed -e "
+s/^$oldstring1/$newstring1/g
+s/^$oldstring2/$newstring2/g
+s/^$oldstring3/$newstring3/g
+s/^$oldstring4/$newstring4/g
+" $filename > $tempfile
+mv $tempfile $filename
+chmod +x dbfinstall
+#
+#
+# Make tar?
+#
+if [ $make_compressed_tar -eq 1 -o $make_gzipped_tar -eq 1 ] ;then
+  cd $tmp
+  #
+  # Set full name of the tar file.
+  #
+  if [ $release_type -eq 1 ] ;then
+    tarfile=$release_path'/dbf-'$dbf_rev'.'$machine_tag'.tar'
+  fi
+  if [ $release_type -eq 2 ] ;then
+    tarfile=$release_path'/dbf-'$dbf_rev'.tar'
+  fi
+  if [ $release_type -eq 3 ] ;then
+    tarfile=$release_path'/dbf-'$dbf_rev'.'$machine_tag'.src.tar'
+  fi
+  #
+  # Delete existing tar.
+  #
+  if [ -f $tarfile ] ;then
+    rm -f $tarfile
+    if [ -f $tarfile ] ;then
+      echo Could not delete existing $tarfile.
+      exit
+    fi
+  fi
+  #
+  # Make the tar.
+  #
+  cd $tmp
+  tar -cvf $tarfile . > /dev/null
+  if [ ! -f $tarfile ] ;then
+    echo Tar failed to create $tarfile.
+    exit
+  fi
+  #
+  # Make compressed tarfile?
+  #
+  if [ $make_compressed_tar -eq 1 ] ;then
+    #
+    # Save a copy if doing gzip also.
+    #
+    if [ $make_gzipped_tar -eq 1 ] ;then
+      cp $tarfile $tempfile
+    fi
+    #
+    # Delete existing compressed tarfile.
+    #
+    if [ -f $tarfile'.Z' ] ;then
+      rm -f $tarfile'.Z'
+    fi
+    #
+    compress $tarfile
+    #
+    # Rename uncompressed copy if doing gzip also.
+    #
+    if [ $make_gzipped_tar -eq 1 ] ;then
+      mv $tempfile $tarfile
+    fi
+  fi
+  #
+  # Make gzipped tarfile?
+  #
+  if [ $make_gzipped_tar -eq 1 ] ;then
+    #
+    # Delete existing gzipped tarfile.
+    #
+    if [ -f $tarfile'.gz' ] ;then
+      rm -f $tarfile'.gz'
+    fi
+    #
+    gzip $tarfile
+  fi
+  #
+  # Copy out the README file.
+  #
+  cp README $release_path'/dbf-'$dbf_rev'.readme'
+  #
+  # Remove the temporary directory
+  #
+  cd $dbfhome
+  if [ $rm_tmp_after_tar -eq 1 ] ;then
+    rm -rf $tmp
+  fi
+fi
+#
+#
+# Done.
+#
+cd $dbfhome
+exit

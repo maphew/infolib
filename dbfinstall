@@ -1,0 +1,1088 @@
+#! /bin/sh
+#
+# dbfinstall
+#
+# Installs EPA Region 10 DBF Utilities.
+#
+# Runs as a Bourne shell.
+#
+# Requires that $ARCHOME be set and it's value readable by this script.
+# If not, set full path to $archome at "archome=$ARCHOME".
+#
+# For the AML install, you must have write access to $ARCHOME/atool/arc.
+#
+# For the UNIX install, you must have write access to wherever you set
+# $binpath
+#
+# Written: 05/19/94 Randy Deardorff, EPA Region 10, Seattle.
+#
+# History: (All changes by the author unless otherwise noted)
+#
+# 05/25/94 Added clean and help options.  Made all file lists variables.
+# Added usage if incorrect argument.
+#
+# 07/21/94 Added automatic byte swap detection.
+#
+# 09/13/94 Added ranlib detection.  Rewrote verify phase and removed
+# from the "full" task.  You have to run verify seperately now.  Made
+# seds for configure phase redoable so that, if the package is moved,
+# it can be reconfigured for it's new home.  Removed swap option.
+# Added pre-compiled detection.
+#
+# 11/09/94 Changes for arc 7.0.2, which has no $ARCHOME/help/arc directory.
+# In this case, AML help files are not installed.
+#
+# 12/14/94 Added full path to arc commands in the verify phase.
+#
+# 01/03/95 ARC help pages and UNIX man pages are no longer installed.
+# They are still uninstalled however, for users of versions prior to 5.5.
+#
+# 01/04/95 Added infodel.
+#
+# 01/10/95 Made ARC level install optional, with default as on.  Removed
+# all use of ARC.  Verify phase formerly called ARC to create a workspace
+# and import an INFO file.  Avoiding this enables the package to be installed
+# and verified, even if ARC is not available.  Put verify phase back in the
+# the "full" install.
+#
+usage1="Usage: dbfinstall <help | configure | build | verify | install | full"
+usage2="uninstall | clean | veryclean | squeakyclean>"
+if [ $# -lt 1 -o $# -gt 1 ] ;then
+  echo $usage1
+  echo "                   "$usage2
+  exit
+fi
+task=$1
+case $task in
+  help | configure | build | install | full | verify | uninstall )
+    :
+  ;;
+  clean | veryclean | squeakyclean )
+    :
+  ;;
+  * )
+    echo $usage1
+    echo "                   "$usage2
+    exit
+  ;;
+esac
+#
+# Site specific options.
+#
+# The following switch is ON by default.  This specifies whether you
+# want the utilities to be installed as AML atools so that they are
+# available from the ARC prompt.  If you don't have ARC/INFO, or there
+# is some other reason that you don't want them installed, turn this
+# switch off by setting it to zero.  
+#
+# If this switch is on, this script will use the value of $ARCHOME to
+# figure out where your arc/atool directory is.
+#
+install_arc=1
+#
+# The following switch is OFF by default.  The utilities installed by
+# this switch are installed as AML utilities by the ARC level install
+# (see above).  You only need this if you also want to install them as
+# UNIX utilities so they will be available outside of ARC/INFO.  If you
+# don't mind having access to them only from ARC, then you do not need
+# to bother with this.  If you turn this on, change binpath as
+# appropriate for your system.
+#
+install_unix=0
+binpath=/svr5/util
+#
+# This manpath is only used by the uninstall option.  If you had a
+# previous version of the utilities (ie, 5.4 or earlier), and you want
+# to uninstall it before installing the new one, set manpath to whatever
+# you used when you installed the earlier version.  Manpath is ONLY used
+# in the uninstall phase.  If you don't have version 5.4 or earlier,
+# you can leave it as is.  It doesn't matter.
+#
+manpath=/svr5/util
+#
+# The following switches are for testing and debugging only.
+# All of these should be set to 0 for normal operation.
+#
+do_debug_arc_install=0
+do_debug_unix_install=0
+#
+# Set up.
+#
+dbfhome=`pwd`
+tempfile=xxdbf.tmp
+rbdlockfile=.dbfrbd.lock
+libs='misc map dbf infox'
+#
+# List of executable files included or required for package.
+#
+exes='info2dbf dbf2info info2ascii ascii2info makecoocoo makegencoo dbflook
+dbfitems dbflist infolook infoitems infolist infodir infodel'
+#
+# List of amls that are copied to the ARC atool directory.
+#
+amls='ascii2info info2ascii info2dbf dbf2info info2cover dbf2cover dbflook
+dbfitems dbflist infodir'
+#
+# List of executable files that are copied to binpath.
+#
+bins='info2dbf dbf2info info2ascii ascii2info dbflook dbfitems dbflist infolook
+infoitems infolist infodir infodel'
+#
+# List of provided files required for verification tests.
+#
+vers='sample1.dbf sample1.dat sample1.def sample1.dbi'
+#
+# Set debug archome (used by install and uninstall testing only).
+#
+if [ $do_debug_arc_install -eq 1 ] ;then
+  archome=$USR2/rbd/tests/tests/dbftest/arcexe70
+fi
+#
+# Check if we're in the program author's development directory.
+# If so, most portions of this install script will not function.
+#
+cd $dbfhome
+at_dev_home=0
+if [ -f $rbdlockfile ] ;then
+  at_dev_home=1
+fi
+#
+# Check if this is a pre-compiled release.
+# We assume the release is pre-compiled if any of the library directories
+# do not exist AND all of the executables do exist.
+# Note that a standard release becomes a pre-compiled release after
+# build and making veryclean.
+#
+pre_compiled=0
+ok=1
+for libhome in $libs
+  do
+  if [ ! -d $libhome ] ;then
+    ok=0
+  fi
+done
+if [ $ok -eq 0 ] ;then
+  pre_compiled=1
+  for filename in $exes
+    do
+    if [ ! -x $filename ] ;then
+      pre_compiled=0
+    fi
+  done
+fi
+#
+# Configure.
+#
+if [ $task = "configure" -o $task = "full" ] ;then
+  cd $dbfhome
+  if [ $at_dev_home -eq 1 ] ;then
+    echo Configure skipped, $rbdlockfile exists...
+  else
+    ok=1
+    if [ $pre_compiled -ne 1 ] ;then
+      for libhome in $libs
+        do
+        if [ ! -d $libhome ] ;then
+          ok=0
+        fi
+      done
+      if [ ! -f rbdpaths.h ] ;then
+        ok=0
+      fi
+      if [ $ok -ne 1 ] ;then
+        echo Files required for configure not found.
+        exit
+      fi
+    fi
+    #
+    # Edit the "utilpath" setting in all main amls to reflect the location
+    # of the binaries and secondary amls at the present installation.
+    #
+    echo 'Resetting paths in amls...'
+    oldstring1='s utilpath.*'
+    newstring1='s utilpath '$dbfhome/
+    newstring1=`echo ${newstring1} | sed s%/%\\\\\\\/%g`
+    for filename in *.aml
+      do
+      sed -e "s/$oldstring1/$newstring1/g" $filename > $tempfile
+      mv $tempfile $filename
+    done
+    #
+    # If this is a pre-compiled release, configure complete, else do the rest.
+    #
+    if [ $pre_compiled -ne 1 ] ;then
+      #
+      # Edit the main C header so that the paths to the library headers reflect
+      # their location at the present installation.
+      #
+      cd $dbfhome
+      echo 'Resetting paths to library headers...'
+      filename=rbdpaths.h
+      oldstring1='define MISC_H.*'
+      oldstring2='define MAP_H.*'
+      oldstring3='define INFO_H.*'
+      oldstring4='define INFOLIB_H.*'
+      oldstring5='define INFODEFS_H.*'
+      oldstring6='define INFOSWAP_H.*'
+      oldstring7='define DBF_H.*'
+      oldstring8='define DBFSYS_H.*'
+      oldstring9='define E00_H.*'
+      newstring1='define MISC_H     \"'$dbfhome'/misc/misc.h\"'
+      newstring2='define MAP_H      \"'$dbfhome'/map/map.h\"'
+      newstring3='define INFO_H     \"'$dbfhome'/infox/infox.h\"'
+      newstring4='define INFOLIB_H  \"'$dbfhome'/infox/infolib.h\"'
+      newstring5='define INFODEFS_H \"'$dbfhome'/infox/infodefs.h\"'
+      newstring6='define INFOSWAP_H \"'$dbfhome'/infox/infoswap.h\"'
+      newstring7='define DBF_H      \"'$dbfhome'/dbf/dbf.h\"'
+      newstring8='define DBFSYS_H   \"'$dbfhome'/dbf/dbfsys.h\"'
+      newstring9='define E00_H      \"'$dbfhome'/e00/e00.h\"'
+      newstring1=`echo ${newstring1} | sed s%/%\\\\\\\/%g`
+      newstring2=`echo ${newstring2} | sed s%/%\\\\\\\/%g`
+      newstring3=`echo ${newstring3} | sed s%/%\\\\\\\/%g`
+      newstring4=`echo ${newstring4} | sed s%/%\\\\\\\/%g`
+      newstring5=`echo ${newstring5} | sed s%/%\\\\\\\/%g`
+      newstring6=`echo ${newstring6} | sed s%/%\\\\\\\/%g`
+      newstring7=`echo ${newstring7} | sed s%/%\\\\\\\/%g`
+      newstring8=`echo ${newstring8} | sed s%/%\\\\\\\/%g`
+      newstring9=`echo ${newstring9} | sed s%/%\\\\\\\/%g`
+      sed -e "
+      s/$oldstring1/$newstring1/g
+      s/$oldstring2/$newstring2/g
+      s/$oldstring3/$newstring3/g
+      s/$oldstring4/$newstring4/g
+      s/$oldstring5/$newstring5/g
+      s/$oldstring6/$newstring6/g
+      s/$oldstring7/$newstring7/g
+      s/$oldstring8/$newstring8/g
+      s/$oldstring9/$newstring9/g
+      " $filename > $tempfile
+      mv $tempfile $filename
+      #
+      # Edit all the C sources to reflect the location of rbdpaths.h
+      # at the present installation.
+      #
+      cd $dbfhome
+      echo 'Resetting paths in C sources...'
+      oldstring1='#include.*rbdpaths.h.*'
+      newstring1='#include '\"$dbfhome/rbdpaths.h\"
+      newstring1=`echo ${newstring1} | sed s%/%\\\\\\\/%g`
+      for filename in *.c
+        do
+        sed -e "s/^$oldstring1/$newstring1/g" $filename > $tempfile
+        mv $tempfile $filename
+      done
+      for libhome in $libs
+        do
+        libfile="$libhome"lib.a
+        if [ -d $libhome ] ;then
+          cd $libhome
+          for filename in *.c
+            do
+            sed -e "s/^$oldstring1/$newstring1/g" $filename > $tempfile
+            mv $tempfile $filename
+          done
+          cd $dbfhome
+        else
+          echo Directory $libhome does not exist.
+          exit
+        fi
+      done
+      #
+      # Check for ranlib and edit makefiles accordingly.
+      # The makefiles must have their ranlib lines exactly as shown (2 tabs).
+      #
+      cd $dbfhome
+      echo 'Checking for ranlib...'
+      oldstring1='		ranlib'
+      newstring1='#		ranlib'
+      word='ranlib'
+      IFS="${IFS= 	}"; saveifs="$IFS"; IFS="${IFS}:"
+      for dir in $PATH
+        do
+        test -z "$dir" && dir=.
+        if test -f $dir/$word; then
+          oldstring1='#		ranlib'
+          newstring1='		ranlib'
+          break
+        fi
+      done
+      IFS="$saveifs"
+      for libhome in $libs
+        do
+        filename='Makefile'
+        if [ -d $libhome ] ;then
+          cd $libhome
+          if [ -f $filename ] ;then
+            sed -e "s/^$oldstring1/$newstring1/g" $filename > $tempfile
+            mv $tempfile $filename
+          else
+            echo Makefile for $libhome does not exist.
+            exit
+          fi
+          cd $dbfhome
+        else
+          echo Directory $libhome does not exist.
+          exit
+        fi
+      done
+      #
+      # Compile the swaptest program.
+      #
+      rm -f swaptest
+      if [ ! -f swaptest.c ] ;then
+        echo File swaptest.c missing.
+        exit
+      fi
+      cc -o swaptest swaptest.c
+      if [ ! -x swaptest ] ;then
+        echo Failed to compile swaptest.c.
+        exit
+      fi
+      #
+      # Check if byte swapping is required on this system.
+      #
+      #$dbfhome/swaptest sample2.dbf.swapped > $tempfile
+      #$dbfhome/swaptest sample2.dbf.unusable > $tempfile
+      $dbfhome/swaptest > $tempfile
+      ok=1
+      swaprequired=1
+      if grep "is required" $tempfile > /dev/null ;then
+        swaprequired=1
+      else
+        if grep "not required" $tempfile > /dev/null ;then
+          swaprequired=0
+        else
+          echo Unable to determine whether byte swapping is required.
+          echo Dbf programs may not function correctly.
+          ok=0
+        fi
+      fi
+      #
+      # Edit rbdpaths.h to set byte swapping as required by this system.
+      #
+      if [ $ok -eq 1 ] ;then
+        if grep "define DOS_SWAP" rbdpaths.h > /dev/null ;then
+          oldstring1='define DOS_SWAP.*'
+          if [ $swaprequired -eq 1 ] ;then
+            newstring1='define DOS_SWAP 1'
+          else
+            newstring1='define DOS_SWAP 0'
+          fi
+          sed -e "s/$oldstring1/$newstring1/g" rbdpaths.h > $tempfile
+          mv $tempfile rbdpaths.h
+        else
+          echo File rbdpaths.h does not contain \"define DOS_SWAP\".
+          exit
+        fi
+      fi
+    fi
+  fi
+fi
+#
+# Build.
+#
+if [ $task = "build" -o $task = "full" ] ;then
+  cd $dbfhome
+  if [ $at_dev_home -eq 1 ] ;then
+    echo Build skipped, $rbdlockfile exists...
+  else
+    if [ $pre_compiled -eq 1 ] ;then
+      if [ $task = "build" ] ;then
+        echo 'This release is pre-compiled.  Build not required.'
+      fi
+    else
+      if [ ! -f Makefile ] ;then
+        echo Makefile not found.
+        exit
+      fi
+      #
+      # Make the libraries.
+      #
+      for libhome in $libs
+        do
+        libfile="$libhome"lib.a
+        if [ -d $libhome ] ;then
+          cd $libhome
+          if [ -f Makefile ] ;then
+            echo Building "$libfile"...
+            make
+            if [ ! -f $libfile ] ;then
+              echo Make failed for library $libfile.
+              cd $dbfhome
+              exit
+            fi
+          else
+            cd $dbfhome
+            echo No Makefile in directory $libhome.
+            exit
+          fi
+          cd $dbfhome
+        else
+          echo Directory $libhome does not exist.
+          exit
+        fi
+      done
+      #
+      # Make the C executables.
+      #
+      cd $dbfhome
+      if [ -f Makefile ] ;then
+        echo Building C executables...
+        make all
+        for filename in $exes
+          do
+          if [ ! -f $filename ] ;then
+            echo Make failed to build $filename.
+            exit
+          else
+            chmod 755 $filename
+          fi
+        done
+      else
+        echo Main Makefile missing.
+        exit
+      fi
+    fi
+  fi
+fi
+#
+# Verify.
+#
+cd $dbfhome
+if [ $task = "verify" -o $task = "full" ] ;then
+  echo 'Verifying function of programs...'
+  tempdatfile=xxverdat.tmp
+  tempdeffile=xxverdef.tmp
+  tempdbffile=xxver.dbf
+  ok=1
+  #
+  # Erase existing info directory and create a new empty one.
+  #
+  rm -fr info
+  mkdir info
+  touch info/arcdr9
+  #
+  # Make sure required files exist.
+  #
+  for file in $bins
+    do
+    if [ ! -x $file ] ;then
+      echo Required file \"$file\" does not exist or is not executable.
+      ok=0
+    fi
+  done
+  for file in $vers
+    do
+    if [ ! -r $file ] ;then
+      echo Required file \"$file\" does not exist or is not readable.
+      ok=0
+    fi
+  done
+  if [ $ok -eq 1 ] ;then
+    #
+    # Verify function of infodir executable.
+    #
+    ./infodir -l > $tempfile
+    if grep "Internal Name" $tempfile > /dev/null ;then
+      echo '    infodir ok.'
+    else
+      echo Required executable \"infodir\" did not function as expected.
+      ok=0
+    fi
+  fi
+  if [ $ok -eq 1 ] ;then
+    #
+    # Create sample INFO file (will be used to verify other programs).
+    # Also verifies function of info2ascii.
+    #
+    ./ascii2info sample1.dat sample1.def SAMPLE1
+    ./infodir SAMPLE1 > $tempfile
+    if grep "SAMPLE1" $tempfile > /dev/null ;then
+      :
+    else
+      echo Could not create sample info file, ie, \"ascii2info\" failed.
+      ok=0
+    fi
+  fi
+  if [ $ok -eq 1 ] ;then
+    #
+    # Verify function of executables required to verify other executables.
+    #
+    # infolist
+    #
+    ./infolist sample1 > $tempfile
+    if cmp -s sample1.dat $tempfile 2>/dev/null; then
+      echo '    infolist ok.'
+    else
+      echo Required executable \"infolist\" did not function as expected.
+      ok=0
+    fi
+    #
+    # infoitems
+    #
+    if [ $ok -eq 1 ] ;then
+      ./infoitems sample1 > $tempfile
+      if cmp -s sample1.def $tempfile 2>/dev/null; then
+        echo '    infoitems ok.'
+      else
+        echo Required executable \"infoitems\" did not function as expected.
+        ok=0
+      fi
+    fi
+    #
+    # dbflist
+    #
+    if [ $ok -eq 1 ] ;then
+      ./dbflist sample1 > $tempfile
+      if cmp -s sample1.dat $tempfile 2>/dev/null; then
+        echo '    dbflist ok.'
+      else
+        echo Required executable \"dbflist\" did not function as expected.
+        ok=0
+      fi
+    fi
+    #
+    # dbfitems
+    #
+    if [ $ok -eq 1 ] ;then
+      ./dbfitems sample1 > $tempfile
+      if cmp -s sample1.dbi $tempfile 2>/dev/null; then
+        echo '    dbfitems ok.'
+      else
+        echo Required executable \"dbfitems\" did not function as expected.
+        ok=0
+      fi
+    fi
+    #
+    # ascii2info
+    #
+    if [ $ok -eq 1 ] ;then
+      rm -f $tempdatfile
+      rm -f $tempdeffile
+      tempinfofile=CHECK2
+      ./ascii2info sample1.dat sample1.def $tempinfofile
+      ./infodir -l > $tempfile
+      if grep $tempinfofile $tempfile > /dev/null ;then
+        ./infolist $tempinfofile > $tempdatfile
+        ./infoitems $tempinfofile > $tempdeffile
+        if cmp -s sample1.dat $tempdatfile 2>/dev/null; then
+          if cmp -s sample1.def $tempdeffile 2>/dev/null; then
+            echo '    ascii2info ok.'
+          else
+            echo '    ascii2info failed.  Item definitions incorrect.'
+            ok=0
+          fi
+        else
+          echo '    ascii2info failed.  Data incorrect.'
+          ok=0
+        fi
+      else
+        echo '    ascii2info failed to create INFO file.'
+        ok=0
+      fi
+    fi
+  fi
+  if [ $ok -eq 1 ] ;then
+    #
+    # All reguired files present and function correctly.
+    # Verify main programs.  If we've made it this far,
+    # everything probably works, but here goes.
+    #
+    # info2ascii
+    #
+    rm -f $tempdatfile
+    rm -f $tempdeffile
+    ./info2ascii SAMPLE1 $tempdatfile $tempdeffile
+    if [ -f $tempdatfile ] ;then
+      if [ -f $tempdeffile ] ;then
+        if cmp -s sample1.dat $tempdatfile 2>/dev/null; then
+          if cmp -s sample1.def $tempdeffile 2>/dev/null; then
+            echo '    info2ascii ok.'
+          else
+            echo '    info2ascii failed.  Field definitions incorrect.'
+            ok=0
+          fi
+        else
+          echo '    info2ascii failed.  Data incorrect.'
+          ok=0
+        fi
+      else
+        echo '    info2ascii failed to create structure file.'
+        ok=0
+      fi
+    else
+      echo '    info2ascii failed to create data file.'
+      ok=0
+    fi
+    #
+    # dbf2info
+    #
+    tempinfofile=CHECK1
+    ./dbf2info sample1.dbf $tempinfofile NOBINARY
+    ./infodir -l > $tempfile
+    if grep $tempinfofile $tempfile > /dev/null ;then
+      ./infolist $tempinfofile > $tempdatfile
+      ./infoitems $tempinfofile > $tempdeffile
+      if cmp -s sample1.dat $tempdatfile 2>/dev/null; then
+        if cmp -s sample1.def $tempdeffile 2>/dev/null; then
+          echo '    dbf2info ok.'
+        else
+          echo '    dbf2info failed.  Item definitions incorrect.'
+          ok=0
+        fi
+      else
+        echo '    dbf2info failed.  Data incorrect.'
+        ok=0
+      fi
+    else
+      echo '    dbf2info failed to create INFO file.'
+      ok=0
+    fi
+    #
+    # info2dbf
+    #
+    rm -f $tempdatfile
+    rm -f $tempdeffile
+    rm -f $tempdbffile
+    ./info2dbf SAMPLE1 $tempdbffile
+    if [ -f $tempdbffile ] ;then
+      ./dbflist $tempdbffile > $tempdatfile
+      ./dbfitems $tempdbffile > $tempdeffile
+      if cmp -s sample1.dat $tempdatfile 2>/dev/null; then
+        if cmp -s sample1.dbi $tempdeffile 2>/dev/null; then
+          echo '    info2dbf ok.'
+        else
+          echo '    info2dbf failed.  Field definitions incorrect.'
+          ok=0
+        fi
+      else
+        echo '    info2dbf failed.  Data incorrect.'
+        ok=0
+      fi
+    else
+      echo '    info2dbf failed to create dbf file.'
+      ok=0
+    fi
+    #
+    # infodel
+    #
+    ./infodel SAMP@
+    ./infodir SAMPLE1 > $tempfile
+    if grep "SAMPLE1" $tempfile > /dev/null ;then
+      echo '    infodel failed to delete INFO file.'
+      ok=0
+    else
+      echo '    infodel ok.'
+    fi
+    #
+    # Check if tests passed.
+    #
+    if [ $ok -eq 1 ] ;then
+      echo All tests passed.
+    else
+      echo One or more of the main programs failed to pass verification tests.
+    fi
+  else
+    echo 'Verify failed in initial phases.  Cannot continue tests.'
+  fi
+  rm -f $tempfile
+  rm -f $tempdatfile
+  rm -f $tempdeffile
+  rm -f $tempdbffile
+  if [ $ok -eq 0 ] ;then
+    if [ $task = "full" ] ;then
+      echo 'Bailing out.  Use the install option to override if desired.'
+      exit
+    fi
+  fi
+fi
+#
+# Install.
+#
+if [ $task = "install" -o $task = "full" ] ;then
+  #
+  # Optional install ARC level utilities (on by default).
+  #
+  cd $dbfhome
+  if [ $at_dev_home -eq 1 ] ;then
+    echo Install skipped, $rbdlockfile exists...
+  else
+    if [ $do_debug_arc_install -eq 1 ] ;then
+      echo "***" Debug arc install to $archome
+      install_arc=1
+    else
+      if [ $install_arc -eq 1 ] ;then
+        archome=$ARCHOME
+      fi
+    fi
+    if [ $install_arc -eq 1 ] ;then
+      echo 'Installing AML utilities...'
+      #
+      # Look up ARCHOME and set path to arc atool.
+      #
+      if [ $archome ] ;then
+        toolhome=$archome/atool/arc
+      else
+        echo '$ARCHOME not set or unavailable to this script.'
+        exit
+      fi
+      #
+      # Make sure we have write access to atool.
+      #
+      if [ -d $toolhome ] ;then
+        if [ ! -w "$toolhome" ] ;then
+          echo You do not have write access to $toolhome.
+          exit
+        fi
+      else
+        echo Directory $toolhome does not exist.
+        exit
+      fi
+      #
+      # Install the aml utilities to archome.
+      #
+      cd $dbfhome
+      for filename in $amls
+        do
+        toolfile=$filename.aml
+        tooltarget=$toolhome/$toolfile
+        if [ -f $toolfile ] ;then
+          cp $toolfile $tooltarget
+          chmod 644 $tooltarget
+        else
+          echo $toolfile not found.  Not installed.
+        fi
+      done
+    fi
+    #
+    # Optional install UNIX level install.
+    #
+    cd $dbfhome
+    if [ $do_debug_unix_install -eq 1 ] ;then
+      install_unix=1
+      binpath=$USR2/rbd/tests/tests/dbftest/bin
+      echo "***" Debug unix install to $binpath
+    fi
+    if [ $install_unix -eq 1 ] ;then
+      echo 'Installing UNIX utilities...'
+      #
+      # Make sure target directory exists and is writable.
+      #
+      if [ -d $binpath ] ;then
+        if [ ! -w "$binpath" ] ;then
+          echo You do not have write access to $binpath.
+          exit
+        fi
+      else
+        echo Directory $binpath does not exist.
+        exit
+      fi
+      #
+      # Install UNIX level utilities.
+      #
+      cd $dbfhome
+      for filename in $bins
+        do
+        toolfile=$filename
+        tooltarget=$binpath/$toolfile
+        if [ -f $toolfile ] ;then
+          cp $toolfile $tooltarget
+          chmod 755 $tooltarget
+        else
+          echo $toolfile not found.  Not installed.
+        fi
+      done
+    fi
+  fi
+fi
+#
+# Uninstall.
+#
+if [ $task = "uninstall" ] ;then
+  #
+  # Optional uninstall ARC level utilities (on by default).
+  #
+  cd $dbfhome
+  if [ $at_dev_home -eq 1 ] ;then
+    echo Uninstall skipped, $rbdlockfile exists...
+  else
+    if [ $do_debug_arc_install -eq 1 ] ;then
+      echo "***" Debug arc uninstall from $archome
+      install_arc=1
+    else
+      if [ $install_arc -eq 1 ] ;then
+        archome=$ARCHOME
+      fi
+    fi
+    if [ $install_arc -eq 1 ] ;then
+      #
+      # Look up ARCHOME and set path to arc atool and help.
+      #
+      if [ $archome ] ;then
+        toolhome=$archome/atool/arc
+        helphome=$archome/help/arc
+      else
+        echo '$ARCHOME not set or unavailable to this script.'
+        exit
+      fi
+      #
+      # Check if old help pages exist.  These are not installed as of rev 5.5.
+      # But, we need to uninstall them in case they were installed previously.
+      #
+      dohelps=0
+      if [ -d $helphome ] ;then
+        for filename in $amls
+          do
+          helptarget=$helphome/$filename
+          if [ -f $helptarget ] ;then
+            dohelps=1
+          fi
+        done
+      fi
+      #
+      # Make sure we have write access to atool (and help if we're doing helps).
+      #
+      if [ -d $toolhome ] ;then
+        if [ ! -w "$toolhome" ] ;then
+          echo You do not have write access to $toolhome.
+          exit
+        fi
+      else
+        echo Directory $toolhome does not exist.
+        exit
+      fi
+      if [ $dohelps -eq 1 ] ;then
+        if [ ! -w "$helphome" ] ;then
+          echo You do not have write access to $helphome.
+          exit
+        fi
+      fi
+      #
+      # Now, actually uninstall the aml utilities from archome.
+      #
+      cd $dbfhome
+      if [ $dohelps -eq 1 ] ;then
+        echo 'Uninstalling AMLs and their help pages...'
+      else
+        echo 'Uninstalling AMLs...'
+      fi
+      for filename in $amls
+        do
+        toolfile=$filename.aml
+        tooltarget=$toolhome/$toolfile
+        rm -f $tooltarget
+        if [ $dohelps -eq 1 ] ;then
+          helptarget=$helphome/$filename
+          rm -f $helptarget
+        fi
+      done
+    fi
+    #
+    # Optional UNIX level uninstall.
+    #
+    cd $dbfhome
+    if [ $do_debug_unix_install -eq 1 ] ;then
+      install_unix=1
+      binpath=$USR2/rbd/tests/tests/dbftest/bin
+      manpath=$USR2/rbd/tests/tests/dbftest/man
+      echo "***" Debug unix uninstall from $binpath and $manpath
+    fi
+    if [ $install_unix -eq 1 ] ;then
+      echo 'Uninstalling UNIX utilities...'
+      #
+      # Make sure we have write access to binpath.
+      #
+      if [ -d $binpath ] ;then
+        if [ ! -w "$binpath" ] ;then
+          echo You do not have write access to $binpath.
+          exit
+        fi
+      else
+        echo Directory $binpath does not exist.
+        exit
+      fi
+      #
+      # Check if we are doing helps.
+      #
+      dohelps=0
+      if [ -d $manpath ] ;then
+        #
+        # Check if any man pages are out there.
+        #
+        for filename in $bins
+          do
+          helptarget=$manpath/$filename.1
+          if [ -f $helptarget ] ;then
+            dohelps=1
+          fi
+        done
+        if [ $dohelps -eq 1 ] ;then
+          #
+          # Yes, old man pages exist, make sure we can write to manpath.
+          #
+          if [ ! -w "$manpath" ] ;then
+            echo You do not have write access to $manpath.
+            exit
+          fi
+        fi
+      fi
+      #
+      # Now, actually do the UNIX uninstall.
+      #
+      cd $dbfhome
+      for filename in $bins
+        do
+        tooltarget=$binpath/$filename
+        if [ -f $tooltarget ] ;then
+          rm -f $tooltarget
+        fi
+        if [ $dohelps -eq 1 ] ;then
+          helptarget=$manpath/$filename.1
+          if [ -f $helptarget ] ;then
+            rm -f $helptarget
+          fi
+        fi
+      done
+    fi
+  fi
+fi
+#
+# Clean.  Remove files that were created by the build/install process,
+# but are not needed for operation of the utilites.  After doing this,
+# you will still be able to reconfigure, rebuild, reverify, and reinstall.
+#
+cd $dbfhome
+if [ $task = "clean" ] ;then
+  cd $dbfhome
+  if [ $at_dev_home -eq 1 ] ;then
+    echo Clean skipped, $rbdlockfile exists...
+  else
+    echo Cleaning...
+    if [ -d info ] ;then
+      rm -fr info
+    fi
+    for libhome in $libs
+      do
+      libfile="$libhome"lib.a
+      if [ -d $libhome ] ;then
+        cd $libhome
+        rm -f *.o
+        rm -f $libfile
+        cd $dbfhome
+      fi
+    done
+  fi
+fi
+#
+# Veryclean.
+#
+cd $dbfhome
+if [ $task = "veryclean" ] ;then
+  if [ $at_dev_home -eq 1 ] ;then
+    echo Veryclean skipped, $rbdlockfile exists...
+  else
+    echo " "
+    echo If you do this, will NOT be able to reconfigure, rebuild, or reverify.
+    echo However, you will still be able to reinstall if the installed copies
+    echo are lost for some reason, such as when a new version of ARC/INFO is
+    echo installed.
+    echo " "
+    echo Enter \"yes\" if you want to proceed with this operation:
+    read answer
+    ok=0
+    if [ $answer ] ;then
+      if [ $answer = "yes" ] ;then
+        ok=1
+        echo Cleaning...
+        cd $dbfhome
+        for libhome in $libs
+          do
+          rm -fr $libhome
+        done
+        if [ -d info ] ;then
+          rm -fr info
+        fi
+        rm -f swaptest*
+        rm -f sample1.*
+        rm -f *.c
+        rm -f *.h
+        rm -f Makefile
+        rm -f CHANGES
+        rm -f TODO
+        rm -f PROBLEMS
+      fi
+    fi
+    if [ $ok -eq 0 ] ;then
+      echo Operation cancelled.  No action taken.
+    fi
+  fi
+fi
+#
+# Squeakyclean.
+#
+cd $dbfhome
+if [ $task = "squeakyclean" ] ;then
+  if [ $at_dev_home -eq 1 ] ;then
+    echo Squeakyclean skipped, $rbdlockfile exists...
+  else
+    echo " "
+    echo WARNING!
+    echo If you do this, will NOT be able to reconfigure, rebuild, reverify, or
+    echo even reinstall the package.  You may need to reinstall if the
+    echo installed copies are lost, such as when a new version of ARC/INFO is
+    echo installed.  Use \"dbfinstall veryclean\" to retain the option to
+    echo reinstall.
+    echo " "
+    echo Enter \"yes\" if you want to proceed with this operation:
+    read answer
+    ok=0
+    if [ $answer ] ;then
+      if [ $answer = "yes" ] ;then
+        ok=1
+        echo Cleaning...
+        cd $dbfhome
+        for libhome in $libs
+          do
+          rm -fr $libhome
+        done
+        if [ -d info ] ;then
+          rm -fr info
+        fi
+        rm -f swaptest*
+        rm -f sample1.*
+        rm -f *.c
+        rm -f *.h
+        rm -f Makefile
+        rm -f CHANGES
+        rm -f TODO
+        rm -f PROBLEMS
+        for filename in $amls
+          do
+          rm -f $filename.aml
+          rm -f $filename.help
+        done
+      fi
+    fi
+    if [ $ok -eq 0 ] ;then
+      echo Operation cancelled.  No action taken.
+    fi
+  fi
+fi
+#
+# Help.
+#
+cd $dbfhome
+if [ $task = "help" ] ;then
+  cd $dbfhome
+  if [ -f dbfinstall.help ] ;then
+    more dbfinstall.help
+  else
+    echo File dbfinstall.help not found.
+    exit
+  fi
+fi
+#
+# All done.
+#
+cd $dbfhome
+exit

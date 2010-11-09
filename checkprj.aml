@@ -1,0 +1,144 @@
+/* CHECKPRJ.AML
+/*------------------------------------------------------------------------------
+/* Checks input units specified in projection file.
+/* Returns .info2cover$dodms true if input units are DMS, else false.
+/* Returns aml$sev non-zero if an error occurred.
+/*
+/* Written: 08/11/92 Randy Deardorff
+/*
+/* History: (All changes are by the author unless otherwise noted)
+/*
+/* 06/17/93 Improved error trapping.
+/* 05/16/94 Make sure project file has both input and output sections.
+/*------------------------------------------------------------------------------
+&args prjfile
+&s progname CHECKPRJ.AML
+&s .info2cover$dodms .false.
+&s opnflag .false.
+&s gofailed .false.
+&s errmsg
+&severity &error &routine uhoh
+/*
+/* Open the projection file.
+/*
+&s io [open %prjfile% iostat -r]
+&if %iostat% ne 0 &then
+  &do
+    &s errmsg Could not open project file
+    &s gofailed .true.
+  &end
+&if %gofailed% &then &goto failed
+&s opnflag .true.
+&s foundoutput .false.
+&s foundinput .false.
+/*
+/* Find the input section.
+/*
+&do &until %iostat% ne 0 or %foundinput%
+  &s rec [read %io% iostat]
+  &if %iostat% eq 0 and not [null %rec%] &then
+    &do
+      &s rec [unquote [translate %rec%]]
+      &s item1 [extract 1 %rec%]
+      &if [type %item1%] eq 1 &then
+        &select %item1%
+          &when INPUT
+            &s foundinput .true.
+        &end
+    &end
+&end
+/*
+/* Make sure we found an input section.
+/*
+&if not %foundinput% or %iostat% ne 0 &then
+  &do
+    &s errmsg Could not find input section of project file
+    &s gofailed .true.
+  &end
+&if %gofailed% &then &goto failed
+/*
+/* Scan input section looking for units.
+/*
+&do &until %iostat% ne 0
+  &s rec [read %io% iostat]
+  &if %iostat% eq 0 and not [null %rec%] &then
+    &do
+      &s rec [unquote [translate %rec%]]
+      &s item1 [extract 1 %rec%]
+      &if [type %item1%] eq 1 &then
+        &select %item1%
+          &when OUTPUT
+            &do
+              &s iostat 102
+              &s foundoutput .true.
+            &end
+          &when UNITS
+            &do
+              &s item2 [extract 2 %rec%]
+              &if not [null %item2%] &then
+                &if [type %item2%] eq 1 &then
+                  &s .info2cover$dodms %item2% eq DMS
+            &end
+        &end
+    &end
+&end
+/*
+/* Close file.
+/*
+&if %opnflag% &then
+  &do
+    &s cstat [close %io%]
+    &s opnflag .false.
+  &end
+/*
+/* Unless end of file, error.
+/*
+&if %iostat% ne 102 &then
+  &do
+    &s errmsg Error reading project file
+    &s gofailed .true.
+  &end
+&if %gofailed% &then &goto failed
+/*
+/* Make sure we found an output section.
+/*
+&if not %foundoutput% &then
+  &do
+    &s errmsg Could not find output section of project file
+    &s gofailed .true.
+  &end
+&if %gofailed% &then &goto failed
+/*
+/* Success!
+/*
+&return
+/*
+/* Unexpected error.
+/*
+&routine uhoh
+&severity &error &fail
+&type Unexpected error (%progname%).
+&if %opnflag% &then
+  &do
+    &s iostat [close %io%]
+    &s opnflag .false.
+  &end
+&return ;&return &warning
+/*
+/* Failed.
+/*
+&label failed
+&if not [null %errmsg%] &then
+  &do
+    &type %errmsg% (%progname%).
+  &end
+&else
+  &do
+    &type %progname% failed.
+  &end
+&if %opnflag% &then
+  &do
+    &s iostat [close %io%]
+    &s opnflag .false.
+  &end
+&return &warning

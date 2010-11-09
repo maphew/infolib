@@ -1,0 +1,14 @@
+/* infodir.aml
+/*----------------------------------------------------------------------------
+/* Written: 09/13/94 Randy Deardorff.  USEPA Seattle.  206-553-8183.
+/*                   rdeardor@r0serv.r10.epa.gov
+/*
+/* This is a simple AML driver for infodir so it can be installed as an
+/* ARC/INFO atool.
+/*
+/* Modification log: (All changes are by the author unless otherwise noted)
+/*----------------------------------------------------------------------------
+&args allargs:rest
+&s utilpath /usr/tmp/dbf2info/
+&sys %utilpath%infodir [unquote %allargs%]
+&return

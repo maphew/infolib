@@ -1,0 +1,40 @@
+Usage: dbfinstall <help | configure | build | verify | install | full
+                   uninstall | clean | veryclean | squeakyclean>
+
+
+<help> -- Displays this file.
+
+<configure> -- Edits the paths to reflect the location of the package
+on your system.  This option need only be run once.  If you move the
+package you will need to reconfigure, rebuild and reinstall.
+
+<build> -- Builds the object libraries and compiles the C programs.
+
+<verify> -- Checks whether the programs perform as expected.  An info
+directory will be created, and a few INFO data files created.  This
+does not use or require ARC/INFO however.  If a directory called info
+already exists, it will be ERASED.
+
+<install> -- Installs the utilities either as ARC atools, or as UNIX
+level utilities, or both.  The ARC install is on by default, and the
+UNIX install is off.  See README for how to change these defaults.
+
+<full> -- Does all of the above, ie, configure, build, verify, and
+install.  If any part fails, execution halts at that point.
+
+<uninstall> -- Undoes the install option.
+
+<clean> -- After a successful install, you can use this option to
+remove all the files that were created during the build, and install
+phases, but are not needed for operation of the package.  After this,
+you will still be able to reconfigure, rebuild, reverify, and
+reinstall should you need to.  If there is an info directory, it will
+be removed.
+
+<veryclean> -- Same as clean, only removes more files.  If you do
+this, will NOT be able to reconfigure, rebuild, or reverify.  However,
+you will still be able to reinstall.
+
+<squeakyclean> -- If you really want to minimize disk use, use this
+option.  However, you will not be able to reinstall without starting
+over from the original tar file or tape.

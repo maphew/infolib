@@ -1,0 +1,546 @@
+/* INFO2COVER.AML
+/*------------------------------------------------------------------------------
+/* Imports an INFO file as a point coverage.
+/* INFO file must have coordinate items for X and Y.  Can have any number of
+/* additional items.  X and Y may be anywhere in the file, and may be in any
+/* projected or geographic units.
+/*
+/* Written: 08/07/92 Randy Deardorff
+/*
+/* History: (All changes are by the author unless otherwise noted)
+/*
+/* 04/23/93 Added packed v loose DMS coord logic.
+/*
+/* 05/03/93 Added project define stuff.
+/*
+/* 05/04/93 Changed joinitem to use linked relate.  Thus, adding
+/* cover-id and establishing values is no longer needed.  I don't know why I
+/* didn't do it this way in the first place.
+/*
+/* 06/08/93 Got rid of makerawcoo.aml.  Its function is now performed
+/* from here by a call to info2ascii.  Changed all messages so they're typed
+/* only if messages are on.  This allows other programs to call this utility
+/* in quiet mode.
+/*
+/* 06/15/93 Corrected a mistake in joinitem.  I was using cover# as
+/* both the joinitem and the startitem.  Changed to use cover# as the joinitem
+/* and cover-id as the startitem.  This bug NOT released in dbf stuff!
+/*
+/* 06/17/93 Got rid of info2covermain.aml and checkargs.aml.  Their
+/* functions now performed here.  Got rid of all global variables except
+/* .info2cover$dodms.  All are deleted before returning.
+/*
+/* 06/21/93 Success now passed back to caller via aml$sev.  Changed
+/* name of checkdms.aml to checkprj.aml.
+/*
+/* 06/23/93 Make sure cover not already exist as file or directory.
+/*
+/* 07/13/93 If coordinates are blank, make them zero (makecoocoo).
+/*
+/* 07/19/93 Changed temporary filenames.
+/*
+/* 07/18/94 Changed help page to show that redefined coordinate items are ok.
+/*
+/* 12/28/94 Added in-line help.
+/*
+/*------------------------------------------------------------------------------
+&args infofile outcov xitem yitem prjfile
+&s progname INFO2COVER
+&s progver 5.7 July 13, 1998
+&s .info2cover$dodms .false.      /* Projection input units DMS or not.
+&s msgstatus [show &messages]
+&s errmsg
+&s gofailed .false.
+&s debugging .false.
+&severity &error &routine uhoh
+&s utilpath /usr/tmp/dbf2info/
+/*
+/*
+/* Temporary filenames.
+/*
+&s xx xx[after [date -ftag] . ]
+&s errfile    %xx%err
+&s tmpdeffile %xx%tmp
+&s rawcoofile %xx%raw
+&s coocoofile %xx%coo
+&s prjcoofile %xx%prj
+&s prjprjfile %xx%prj.prj  /* Created by ARC when coocoofile is projected.
+&s prjdeffile %xx%def.prj  /* .prj required else ARC ignores the file!
+&s genfile    %xx%gen
+&s helpfile   %xx%hlp
+/*
+/*
+/* Make first argument is specified.
+/*
+&if [null %infofile%] &then &goto usage
+&if [type %infofile%] ne 1 &then &goto usage
+/*
+/*
+/* Check if help requested.
+/*
+&if [translate %infofile%] eq -HELP &then
+  &goto help
+/*
+/*
+/* Make remaining arguments are specified.
+/*
+&if [null %outcov%] &then &goto usage
+&if [type %outcov%] ne 1 &then &goto usage
+&if [null %xitem%] &then &goto usage
+&if [null %yitem%] &then &goto usage
+/*
+/*
+/* Clean up filename args for announcement of intent.
+/*
+&s infofile [translate %infofile%]
+&s outcov [translate %outcov%]
+/*
+/*
+/* Announce intent.
+/*
+&if [extract 1 %msgstatus%] eq &ON &then
+  &type Creating point coverage %outcov% from INFO file %infofile%...
+/*
+/*
+/* Check for bogus arguments and other error conditions.
+/*
+&if not [exists [dir [pathname *]] -workspace] &then
+  &do
+    &s errmsg %progname%: Current location is not a workspace.
+    &s gofailed .true.
+  &end
+&if %gofailed% &then &goto failed
+/*
+/* Check input file name.
+/*
+&if not [exists %infofile% -info] &then
+  &do
+    &s gofailed .true.
+    &s errmsg INFO file %infofile% does not exist.
+  &end
+&if %gofailed% &then &goto failed
+/*
+/* Check output cover name.
+/*
+&if [exists %outcov% -cover] &then
+  &do
+    &s gofailed .true.
+    &s errmsg Coverage %outcov% already exists.
+  &end
+&if %gofailed% &then &goto failed
+&s temp [locase %outcov%]
+&if [exists %temp% -file] or [exists %temp% -directory] &then
+  &do
+    &type File or directory %temp% already exists.
+    &s errmsg Unable to create coverage %outcov%.
+    &s gofailed .true.
+  &end
+&if %gofailed% &then &goto failed
+/*
+/* Check xitem name.
+/*
+&if [type %xitem%] ne 1 &then
+  &do
+    &s errmsg %xitem% is not a valid item name.
+    &s gofailed .true.
+  &end
+&if %gofailed% &then &goto failed
+&s xitem [translate %xitem%]
+/*
+/* Check yitem name.
+/*
+&if [type %yitem%] ne 1 &then
+  &do
+    &s errmsg %yitem% is not a valid item name.
+    &s gofailed .true.
+  &end
+&if %gofailed% &then &goto failed
+&s yitem [translate %yitem%]
+/*
+/* Check project file name and set flag for whether projecting or not.
+/*
+&s doproject not [null %prjfile%]
+&if %doproject% &then
+  &do
+    &if [type %prjfile%] ne 1 &then
+      &do
+        &s errmsg %prjfile% is not a valid projection file name.
+        &s gofailed .true.
+      &end
+    &else
+      &do
+        &if %prjfile% eq # &then
+          &do
+            &s doproject .false.
+          &end
+        &else
+          &do
+            &if not [exists %prjfile% -file] &then
+              &do
+                &s errmsg Projection file %prjfile% does not exist.
+                &s gofailed .true.
+              &end
+          &end
+      &end
+  &end
+&if %gofailed% &then &goto failed
+/*
+/*
+/* Set program variables.
+/*
+&s pat [entryname %outcov%].PAT
+&s recno [entryname %outcov%]#
+&s iditem [entryname %outcov%]-ID
+/*
+/*
+/* Delete old output files if they exist.
+/*
+&call killtemps
+&if not %ok% &then
+  &do
+    &s errmsg %progname%: Unable to delete temporary file.
+    &s gofailed .true.
+  &end
+&if %gofailed% &then &goto failed
+/*
+/*
+/* If projecting check if input units are DMS.
+/*
+&s inunits OTHER
+&if %doproject% &then
+  &do
+    &r %utilpath%checkprj %prjfile%
+    &if %aml$sev% eq 0 &then
+      &do
+        &if %.info2cover$dodms% &then &s inunits DMS
+      &end
+    &else
+      &do
+        &s gofailed .true.
+      &end
+  &end
+&if %gofailed% &then &goto failed
+/*
+/*
+/* List arguments for debuggers.
+/*
+&if %debugging% &then
+  &do
+    &type         Input file=%infofile%
+    &type    Output coverage=%outcov%
+    &type              Xitem=%xitem%
+    &type              Yitem=%yitem%
+    &if %doproject% &then
+      &do
+        &type    Projection file=%prjfile%
+        &type        Input units=%inunits%
+      &end
+    &else
+      &do
+        &type           (No projection)
+      &end
+  &end
+/*
+/*
+/* Create an ascii file listing of the coordinates.
+/*
+&if [extract 1 %msgstatus%] eq &ON &then
+  &type   Extracting coordinates...
+/*
+&messages &off &all
+info2ascii %infofile% %rawcoofile% %tmpdeffile% ',' # noquote %xitem% %yitem%
+&if %aml$sev% ne 0 &then
+  &do
+    &s gofailed .true.
+    &s errmsg %progname% (INFO2ASCII): Could not extract coordinates.
+  &end
+&messages %msgstatus%
+&if %gofailed% &then &goto failed
+/*
+/*
+/* Convert the ascii file we just created to format suitable
+/* for project or for makegencoo.
+/*
+&s modulename MAKECOOCOO
+&sys %utilpath%makecoocoo %rawcoofile% %coocoofile% %inunits% %errfile%
+&if [exists %errfile% -file] &then &goto fetch_error_message
+&if not [exists %coocoofile% -file] &then &goto failed
+/*
+/*
+/* If coordinates are to be projected, make it so.
+/* Otherwise, just pretend.
+/*
+&if %doproject% &then
+  &do
+    &if [extract 1 %msgstatus%] eq &ON &then
+      &type   Projecting...
+    &severity &error &ignore
+    project file %coocoofile% %prjcoofile% %prjfile%
+    &s success %aml$sev% eq 0
+    &severity &error &routine uhoh
+    &if not %success% or not [exists %prjcoofile% -file] &then
+      &do
+        &s gofailed .true.
+        &s errmsg %progname%: Problem during PROJECT.
+      &end
+  &end
+&else
+  &do
+    &s prjcoofile %coocoofile%
+  &end
+&if %gofailed% &then &goto failed
+/*
+/*
+/* Generate the coverage.
+/*
+&if [extract 1 %msgstatus%] eq &ON &then
+  &type   Generating points...
+&s modulename MAKEGENCOO
+&sys %utilpath%makegencoo %prjcoofile% %genfile% %errfile%
+&if [exists %errfile% -file] &then &goto fetch_error_message
+&if not [exists %genfile% -file] &then &goto failed
+/*
+&messages &off &all
+generate %outcov%
+input %genfile%
+points
+quit
+&messages %msgstatus%
+&if not [exists %outcov% -cover] &then
+  &do
+    &s gofailed .true.
+    &s errmsg %progname%: Problem during GENERATE.
+  &end
+&if %gofailed% &then &goto failed
+/*
+/*
+/* Build.
+/*
+&messages &off &all
+build %outcov% points
+&messages %msgstatus%
+/*
+/*
+/* Join the input INFO file to the PAT of the output coverage.
+/*
+&if [extract 1 %msgstatus%] eq &ON &then
+  &type   Joining %infofile% to %pat%...
+&messages &off &all
+&severity &error &ignore
+joinitem %pat% %infofile% %pat% %recno% %iditem% link
+&s success %aml$sev% eq 0
+&severity &error &routine uhoh
+&messages %msgstatus%
+&if not %success% &then
+  &do
+    &s gofailed .true.
+    &s errmsg %progname%: Problem during JOINITEM.
+  &end
+&if %gofailed% &then &goto failed
+/*
+/*
+/* If we projected, define the projection of the coverage.
+/*
+&if %doproject% &then
+  &do
+    /*
+    /* Create the projectdefine file.
+    /*
+    &if [extract 1 %msgstatus%] eq &ON &then
+      &type   Setting projection definition...
+    &r %utilpath%makeprjdef %prjfile% %prjdeffile%
+    &if %aml$sev% eq 0 &then
+      /*
+      /* File created ok.  Define the projection.
+      /*
+      &do
+        &messages &off &all
+        projectcopy file %prjdeffile% cover %outcov%
+        &messages %msgstatus%
+      &end
+    &else
+      /*
+      /* Could not create file.
+      /*
+      &do
+        &if [extract 1 %msgstatus%] eq &ON &then
+          &type Warning: Could not define projection of output coverage.
+      &end
+  &end
+/*
+/*
+/* Job complete.  No detectable errors.
+/*
+&messages %msgstatus%
+&if not %debugging% &then
+  &call killtemps
+&delvar .info2cover$*
+&return
+/*
+/*
+/* Fetch error message from C program, then drop through to failed.
+/*
+&label fetch_error_message
+&if %debugging% &then &type Fetching error message...
+&s errunit [open %errfile% ok -r]
+&if %ok% ne 0 &then &goto failed
+&s errmsg [read %errunit% ok]
+&s errmsg %progname% (%modulename%): %errmsg%
+&if %ok% ne 0 &then &goto failed
+&s ok [close %errunit%]
+&if %ok% ne 0 &then &goto failed
+&s ok [delete %errfile% -file]
+/* Drop through to failed...
+/*
+/*
+/* Failed.
+/*
+&label failed
+&messages %msgstatus%
+&if not [null %errmsg%] &then
+  &do
+    &type %errmsg%
+  &end
+&else
+  &do
+    &type %progname% failed.
+  &end
+&if not %debugging% &then
+  &call killtemps
+&delvar .info2cover$*
+&return &warning
+/*
+/*
+/* Unanticipated error.
+/*
+&routine uhoh
+&messages %msgstatus%
+&severity &error &fail
+&type %progname%: Unanticipated error.
+&if not %debugging% &then
+  &call killtemps
+&delvar .info2cover$*
+&return ;&return &warning
+/*
+/*
+/*
+/*
+&routine killtemps
+&s ok .false.
+&s status 0
+&if [exists %errfile% -file] &then &s status [delete %errfile%]
+&if %status% ne 0 &then &return
+&if [exists %tmpdeffile% -file] &then &s status [delete %tmpdeffile%]
+&if %status% ne 0 &then &return
+&if [exists %rawcoofile% -file] &then &s status [delete %rawcoofile%]
+&if %status% ne 0 &then &return
+&if [exists %coocoofile% -file] &then &s status [delete %coocoofile%]
+&if %status% ne 0 &then &return
+&if [exists %prjcoofile% -file] &then &s status [delete %prjcoofile%]
+&if %status% ne 0 &then &return
+&if [exists %prjprjfile% -file] &then &s status [delete %prjprjfile%]
+&if %status% ne 0 &then &return
+&if [exists %prjdeffile% -file] &then &s status [delete %prjdeffile%]
+&if %status% ne 0 &then &return
+&if [exists %genfile% -file] &then &s status [delete %genfile%]
+&if %status% ne 0 &then &return
+&if [exists %helpfile% -file] &then &s status [delete %helpfile%]
+&if %status% ne 0 &then &return
+&s ok .true.
+&return
+/*
+/*
+/* Usage return point.
+/*
+&label usage
+&type %progname% Version %progver%.
+&type Randy Deardorff, US EPA Region 10, Seattle. (rdeardor@r0serv.r10.epa.gov)
+&type Usage: %progname% <infofile> <outcov> <xitem> <yitem> {projection_file}
+&delvar .info2cover$*
+&return &warning
+/*
+/*
+/* Help return point.
+/*
+&label help
+&s gofailed .false.
+&s io [open %helpfile% ok -w]
+&if %ok% ne 0 &then
+  &do
+    &s gofailed .true.
+    &type %progname%: Could not open temporary file %helpfile%.
+  &end
+&if %gofailed% &then &goto failed
+&call writehelp
+&if [close %io%] ne 0 &then
+  &do
+    &s gofailed .true.
+    &type %progname%: Could not close temporary file %helpfile%.
+  &end
+&if %gofailed% &then &goto failed
+&sys more %helpfile%
+&if [delete %helpfile% -file] ne 0 &then
+  &type %progname% Warning: Could not delete temporary file %helpfile%.
+&delvar .info2cover$*
+&return &warning
+/*
+/*
+/* Write help text to help file.
+/*
+&routine writehelp
+/* @ begin help
+&s x [write %io% 'Usage: INFO2COVER <infofile> <outcov> <xitem> <yitem> {projection_file}']
+&s x [write %io% '']
+&s x [write %io% 'Creates a point coverage from an INFO file.']
+&s x [write %io% '']
+&s x [write %io% '']
+&s x [write %io% 'Arguments:']
+&s x [write %io% '']
+&s x [write %io% '<infofile> -- The INFO data file to convert to a coverage.']
+&s x [write %io% '']
+&s x [write %io% '<outcov> -- The name for the output coverage.']
+&s x [write %io% '']
+&s x [write %io% '<xitem> -- The name of the item that is the X coordinate.']
+&s x [write %io% '']
+&s x [write %io% '<yitem> -- The name of the item that is the Y coordinate.']
+&s x [write %io% '']
+&s x [write %io% '{projection_file} -- The projection file to be used to project the']
+&s x [write %io% '  coordinates from what they are in the INFO file to what they should be']
+&s x [write %io% '  in the coverage.']
+&s x [write %io% '']
+&s x [write %io% '']
+&s x [write %io% 'Notes:']
+&s x [write %io% '']
+&s x [write %io% 'The INFO file must contain items for the x and y coordinates.  These']
+&s x [write %io% 'may be redefined items.  Any number of additional items are permitted,']
+&s x [write %io% 'but nothing else is required.']
+&s x [write %io% '']
+&s x [write %io% 'Points in the output coverage will be given user ids starting with one']
+&s x [write %io% 'and incrementing up by one for each record in the INFO file.  Do not']
+&s x [write %io% 'add a cover-id item to the INFO file before running info2cover.']
+&s x [write %io% '']
+&s x [write %io% 'All of the items in the INFO file will be joined to the PAT of the']
+&s x [write %io% 'output coverage.  The INFO file itself remains unchanged.']
+&s x [write %io% '']
+&s x [write %io% 'The X and Y coordinates can be in any projection or geographic']
+&s x [write %io% 'representation supported by ARC/INFO.  Coordinates in degrees minutes']
+&s x [write %io% 'seconds may be packed together with no spaces separating the values,']
+&s x [write %io% 'ie, 1224530.9, or they may have spaces or colons, ie, 122 45 30.9, or']
+&s x [write %io% '122:45:30.9.']
+&s x [write %io% '']
+&s x [write %io% 'If you specify a projection file, it will be used to project the']
+&s x [write %io% 'coordinates from what they are in the INFO file to what they will be']
+&s x [write %io% 'in the coverage.  If the coordinates are already projected (state']
+&s x [write %io% 'plane, UTM, etc) then you don''t need to specify a projection file, but']
+&s x [write %io% 'you may if you want to.  If the coordinates are in DMS then you must']
+&s x [write %io% 'specify a projection file.']
+&s x [write %io% '']
+&s x [write %io% 'The projection file must have both input and output sections defined.']
+&s x [write %io% '']
+&s x [write %io% 'The output projection specified by the projection file will be used to']
+&s x [write %io% 'set the projection definition of the output coverage.  If you do not']
+&s x [write %io% 'specify a projection file, then the projection definition will not be']
+&s x [write %io% 'set.  If the projection file you use does not specify datum, NAD27']
+&s x [write %io% 'will be inserted.']
+/* @ end help
+&return

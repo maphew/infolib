@@ -1,0 +1,21 @@
+/* dbflook.aml
+/*----------------------------------------------------------------------------
+/* Written: 05/20/94 Randy Deardorff.  USEPA Seattle.  206-553-8183.
+/*                   rdeardor@r0serv.r10.epa.gov
+/*
+/* This is a simple AML driver for dbflook so it can be installed as an
+/* ARC/INFO atool.
+/*
+/* Modification log: (All changes are by the author unless otherwise noted)
+/*----------------------------------------------------------------------------
+&args dbffile fopt
+&s utilpath /usr/tmp/dbf2info/
+&if [null %dbffile%] &then
+  &sys %utilpath%dbflook
+&else
+  &do
+    &if [null %fopt%] &then
+      &s fopt TABLE
+    &sys %utilpath%dbflook %dbffile% %fopt%
+  &end
+&return

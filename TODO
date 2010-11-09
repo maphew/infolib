@@ -1,0 +1,17 @@
+To do list for dbf utility package.
+-----------------------------------
+
+Do a full Windows NT release.  This will be possible once we migrate
+our GIS shop to Windows NT.
+
+Make the AML drivers use multiple variables for the arguments.
+Currently they use a single variable for the entire list of arguments.
+When longer than AML's maximum, the program fails.
+
+Make structure file optional in ascii2info for delimited files.
+
+Allow binary data in character items in info2dbf.  Currently dbf2info
+allows this, but info2dbf does not.  Ideally, you should be able to
+convert a dbf file with binary data to INFO, then back to dbf, and get
+exactly what you started with.  The current version of info2dbf,
+however, converts binary bytes to '*'.

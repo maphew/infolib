@@ -1,0 +1,390 @@
+Version 5.7 July 13, 1998
+---------------------------------------------------------------------
+
+Changes in this version are significant to WinNT/9x only.
+
+Fixed a problem in the InfoLib routine InfoParsePath() to do with
+filenames on the PC.  The code was looking for ":" as an arc style
+info path, eg, "/foo/info:arc:infofile".  Added some code to recognize
+PC style driveletter:/ paths.
+
+Renamed files that had been changed to conform to 8.3.  All files now
+have same names in UNIX and NT.
+ 
+Version 5.6 June 9, 1997
+---------------------------------------------------------------------
+ 
+Fixed a bug where I and B values greater than 2147483647 were
+overflowing and ending up as 2147483647.  Changes in recinfo2dbf and
+recinfo2asc.  Effects info2dbf, infolook, infolist, etc.
+
+Fixed a bug in Todd's code similar to above but effecting dbf2info and
+others that write info records.  Function is InfoEncode in infoitem.c.
+
+Made info2cover and dbf2cover define the datum of the output coverage
+as NAD27, unless a datum is specified in the projection file.
+
+At DGUX 4.11T, the programs and libraries need "gcc -traditional".
+This change also requires "-lm".  See Makefile for more.  Modified
+makefiles accordingly.  Other systems my need to reverse these
+changes, or try -fwritable-strings, or whatever switch your compiler
+uses to allow string constants to be written to.
+
+Fixed bug in defsinfo2dbf that caused info2dbf to give a fatal error
+for N or F fields with a width of less than 3 and with 0 decimals.
+
+Eliminated all error checking on incoming date fields in ascii2info.
+This allows dates to be blank or empty without causing an error.
+
+Version 5.5 April 21, 1995
+---------------------------------------------------------------------
+
+Fixed a bug in map/dmsint2dbl.c called indirectly by dbf2cover and
+info2cover.  This bug caused bogus results with negative longitudes.
+
+Added record number to error messages in makecoocoo and makegencoo.
+These are part of info2cover, and therefore also part of dbf2cover.
+
+Made changes to allow programs to work under DOS for processing
+ArcView data.
+
+The programs no longer have ARC help pages or UNIX man pages.  They
+now accept a "-help" argument to display a built-in help page.  This
+was done so that the help pages would be consistenly available both
+ARC 6, and ARC 7, and from the system prompt (UNIX or DOS).  The ARC
+help pages and UNIX man pages are no longer supplied or installed.
+However, they are still uninstalled in case they were installed by a
+previous version.
+ 
+Added a new program, infodel, that deletes INFO files (with
+wildcarding) from the system prompt.  If the INFO file is an external
+file, eg, cover.pat, only the actual INFO file is deleted, not the
+cover/pat file.
+
+Installing the utilities as ARC commands is now optional.  This allows
+sites that don't have ARC/INFO to install and use the system level
+utilities.
+
+The install script no longer uses ARC/INFO.  Formerly, the
+verification tests called ARC to create a workspace and import an INFO
+file.  These steps are now done at the system level.  The verification
+tests are now part of the "full" install.
+
+Fixed bugs in infodir, mostly to do with optional args.
+
+Fixed a Sun only bug in info2ascii.
+
+Rewrote misc/syscwd.c, which was causing infodir to dump a core on
+DEC/Alpha.
+
+
+Version 5.4 December 16, 1994
+---------------------------------------------------------------------
+ 
+Fixed problems having to do with 8.3 workspaces in the info direct
+access functions.  The functions now work equally well under ARC 6.1.1
+and ARC 7.0.2 regardless of whether the workspace you are in is
+pre-8.3 or 8.3, and regardless of whether you are attempting to create
+the FIRST info file, or subsequent info files.  This elimates the
+workarounds that were required at ARC 7.0.2 in version 5.3.
+
+Fixed bug in dbf2info wherein it attempted to read a directory as if
+it were a dbf file.  This fix also applies to dbflook, dbfitems, and
+dbflist.
+
+Fixed bugs in infodir.
+
+ 
+Version 5.3 November 29, 1994
+---------------------------------------------------------------------
+ 
+Changed Makefile to refer to the math library as /usr/lib/libm.a.
+This should work on more systems than the previous -lm usage.
+
+Fixed three non-DG bugs in my C code.
+
+Help files are not installed unless $ARCHOME/help/arc exists.  It
+no longer exists in arc 7.0.2.
+
+This version does NOT fix problems with 8.3 workspaces in arc 7.0.2.
+Unfortunately, there are a few problems in the info direct access
+functions that I'm using.  See arc 7.0.2 notes in README.
+
+
+Version 5.2 October 20, 1994
+---------------------------------------------------------------------
+
+Incorporated version 1.2 of Todd Stellhorn's info direct access
+functions.  This allows the programs to work with the new 8.3 file
+name option in ARC 7.0.
+
+ 
+Version 5.1 October 5, 1994
+---------------------------------------------------------------------
+ 
+Added SINGLEQUOTE option to info2ascii and ascii2info.
+
+Added PROBLEMS file with problems and fixes for various systems.
+
+Improved portability of the swaptest program by allowing for variously
+sized data types.  Previous version would fail unless long was 4 bytes
+and unsigned short was 2 bytes.  The main programs already did this,
+but swaptest did not.
+
+Changed a few data types in dbflib for compatibility with PC.
+
+
+Version 5.0 September 13, 1994
+---------------------------------------------------------------------
+
+Incorporated Todd Stellhorn's (tstellhorn@esri.com) info direct access
+functions into the supplied infoxlib.a.  See source code in infox for
+Todd's notices and disclaimers.
+
+Converted all programs to read and write INFO data files directly
+rather than via an E00 file.  Programs are now more than three times
+faster when reading INFO files, and over six times faster when writing
+them.
+
+Everything except dbf2cover and info2cover can now be run from the
+UNIX prompt, without the need for ARC.  Odd, but handy, once you get
+used to it.
+
+Added infodir, infolist, infoitems, and infolook.  Infodir has a
+driver AML and is installed as an ARC command.  The others don't,
+since they essentialy duplicate existing ARC commands.  They can all
+be installed as UNIX commands, to run outside or ARC.
+
+Dbf2info and info2dbf now accept specified items.  The default is
+still to translate all items, but you can specify which items, and in
+which order, if you wish.
+
+Dbf2info now permits binary data in character fields.  Actually, all
+field types except N and F may contain binary data.  Binary data is
+converted verbatim to INFO data.
+
+Programs that read dbf files will no longer fail if memo fields are
+found.  Memo fields are converted to 10 byte character fields.  The
+memo contents are not processed, however.
+
+Info2dbf now automatically resolves duplicate field names.
+
+Made the programs more forgiving, by internally resolving most of the
+former fatal errors.
+
+The install script now senses and adjusts for various system
+dependencies (ranlib, etc).  Similarly, rewrote the verify phase.
+Should now work on any unix box (I hope!).  Added an uninstall option
+the the install script.
+
+Put out a pre-compiled release for Data General AViion.
+
+ 
+Version 4.4 July 21, 1994
+---------------------------------------------------------------------
+
+Added options to process redefined items.  This applies to info2dbf,
+info2ascii, and info2cover.
+
+Added improved portability of the dbf stuff by allowing for variously
+sized data types.  Previous versions would fail unless long was 4
+bytes and unsigned short was 2 bytes.
+
+Added automatic byte swap detection to the install script.
+
+ 
+Version 4.3a June 1, 1994
+---------------------------------------------------------------------
+
+Renamed info directory and library from info to infox.
+ 
+Added help option to install script.  Added TODO.  Made all AMLs and C
+programs have the same version and date as the release.
+
+Added clean options to the install script to delete files that are no
+longer needed after a successful install.
+
+
+Version 4.3 May 24, 1994
+---------------------------------------------------------------------
+
+The new release includes all source code, and an installation script
+that configures everything you your site, builds the executables, and
+copy the required files to $ARCHOME.  There is no longer a separate
+source release.
+
+Changed so that programs first look for the input file as specified,
+then, if file not found, appends the default extension and tries
+again.  This allows you to proccess dbf files that do not have a .dbf
+extension.
+
+Made dbflook, dbflist, and dbfitems into AML utilities so they run
+from the ARC prompt.  You can still install them as unix utilities if
+you want, but you have to specify this by editing dbfinstall.  The
+default is to install them as AML tools only.
+
+Made ascii2info ignore blank lines in the structure file.  Also allow
+it to be delimited by any mixture of tabs or spaces.
+
+
+Version 4.2 May 19, 1994
+---------------------------------------------------------------------
+
+05/19/94 Made a new release that has no precompiled executables.
+Since I no longer have a Sun, I can only provide DG executables.  New
+package includes all source, with instructions to build the
+executables and install everything.  When I have time, I'll write a
+script to automate the build/install process and do another release.
+
+05/16/94 Info2cover now checks the projection file to make sure it
+has both input and output sections.  This also affects dbf2cover.
+
+03/14/94 Changed low level functions so that incoming dbf N or F
+values with values like "00000-123" and "0000-1.234" are treated as
+negative values, ie, strip leading zeros.  This is consistent with
+Census data, but is not consistent with dBASE, where such values are
+treated as zero.  Also eliminated fatal error when an incoming N or F
+field contains other than a numeric value.  If it's still not a number
+after stripping leading and trailing spaces and leading zeros, then
+simply change it to zero and go on.  No warning.
+
+03/07/94 Low level changes so that incoming info F or N values that
+are too wide for their field are converted to E format rather than
+causing a "too wide" fatal error.  This affects only the info2
+programs (info2ascii, info2dbf, also e00look).
+
+03/02/94 Added ^E as a valid dbfid indicating memo fields present.
+This is apparently used by dBASE IV.
+
+03/01/94 Made fatal errors more verbose.  In all cases where an
+incoming value causes a fatal error, the message now tells which
+record number and field number triggered the error, and lists the
+offending value.
+
+
+Version 4.1 December 7, 1993
+---------------------------------------------------------------------
+
+11/02/93 In info2ascii.c, enlarged size of MAXRECLEN from 2048 to
+INFO_MAXLEN+INFO_MAXITEMS+1.  This allows for the largest possible
+record size for a comma delimited file.  Same for ascii2info.c but
+from 4096.
+
+07/28/93 -- Wrote new program "dbfitems" that lists dbf field
+definitions to the screen or ">" to file (but not released yet).
+
+07/28/93 -- Added "Coordinate items may not be redefined items" to the
+help file for info2cover. 
+
+
+Version 4.0 July 26, 1993
+---------------------------------------------------------------------
+
+Installation now done by menu.  You don't have to edit or rename any
+files.  Unix part of the install can still be done by running a simple
+script if desired, but you have to fix the paths yourself.
+
+Dbf2info and dbf2cover now skip DBF records that are flagged for
+delete.
+
+Info2cover and dbf2cover failed with an error message if a coordinate
+field was empty.  Now, empty coordinate fields are converted to zero.
+
+All amls now respect the current &messages setting so that they can be
+invoked silently (unless an error occurs).  Got rid of all global
+variables.  All utilities now return success flag via aml$sev.
+
+Made info2cover call info2ascii instead of dropping into INFO.
+
+
+Version 3.0b May 12, 1993.
+---------------------------------------------------------------------
+
+Forgot to comment out the "Closed for repairs" stuff in
+info2covermain.aml.  
+
+Fixed and made a dbf-v3b release of dbf stuff.
+
+
+Version 3.0a May 5, 1993
+---------------------------------------------------------------------
+
+Made three changes to info2cover and dbf2cover:
+
+DMS coordinates with spaces or colons between the degree minute second
+components are now permitted.  Formerly, they had to be packed
+together with no spaces between.
+
+Added project define to the output coverage.  This only happens if you
+specify a projection file.  There is no choice: if you give a
+projection file, then you get project define.
+
+Changed the joinitem that joins the input info file to the PAT of the
+output coverage so that it uses the link relate.  This change has no
+affect other than to make execution faster.
+
+
+Version 3.0 April 20, 1993
+---------------------------------------------------------------------
+
+Added the {BINARY|NOBINARY} option to dbf2info.  This option specifies
+how to translate type N or F fields that have no decimals.  The
+previous version translated these to type I info items.  However, a
+more compact and efficient INFO file results if certain of these are
+translated to type B info items.  The new default option, BINARY,
+translates type N or F dBASE fields with no decimals to type B items
+when it would be more compact and efficient to do so.  The NOBINARY
+option uses type I translation.  See dbf2info.help for more.
+
+If you have already installed version 2.0, the only files you really
+need to install for version 3.0 are dbf2info.aml, dbf2info.help, and
+the executable for dbf2info.  Nothing else is changed.
+
+
+Version 2.0 April 13, 1993
+---------------------------------------------------------------------
+
+Info2dbf now has an option to create type III+ or IV dbf files.  This
+affects the maximum number of items allowed, and the way that type F
+INFO items are translated to dBASE.  See help info2dbf for more.
+
+Info2dbf now checks for type F or N items with number of decimals set
+to more than the field width minus two.  dBASE requires that the
+number of decimals be no more than two less than the field width.
+Info allows just one less.
+
+Dbf2info now has an option for how to handle non-printable characters
+in the data section.  This was formerly a fatal error.  However,
+FoxPro (and possibly dBASE IV or V) allow binary data in character
+fields, so the option to permit this was needed.  See help dbf2info
+for more.
+
+Dbf2info now handles type F dBASE fields.
+
+Type N fields with number of decimals greater than zero, and a field
+width of 8 or less are now translated to INFO as type N items.
+Formerly they were promoted to type F INFO items if they were wider
+than 4.
+
+Type N fields now cause an error if their values float.  dBASE allows
+type N values to float, adjusting the decimal accordinly.  INFO does
+not do this, so the translation fails if such values are found.
+
+
+Version 1.0 March 2, 1993.
+---------------------------------------------------------------------
+
+Now includes executables for Sun as well as DG.  This release also
+included dbf2cover, info2cover, and dbflist.
+
+This was the version that Ray Peterson took to the EPA GIS meeting in
+San Francisco in February of 1993.
+
+
+Version 1.0 November 5, 1992.
+---------------------------------------------------------------------
+
+Initial version.  Handled dBASE III+ files only.  No type
+F fields were allowed.  I didn't know that dBASE IV (and FoxPro)
+allowed type F fields.  If your dbf file contained them, the program
+would fail rather inelegantly.
